@@ -19,7 +19,7 @@ class BtormcModelChecker(targetDir: os.Path) extends IsModelChecker {
 
     // execute model checker
     val kmaxOpt = if (kMax > 0) Seq("--kmax", kMax.toString) else Seq()
-    val cmd = Seq("btormc") ++ kmaxOpt ++ Seq(filename)
+    val cmd = Seq("btormc") ++ kmaxOpt ++ Seq("--trace-gen-full") ++ Seq(filename) 
     val r = os.proc(cmd).call(cwd = targetDir, check = false)
 
     // write stdout to file for debugging

@@ -74,7 +74,7 @@ object TSequence
       val ret1 = parseTSequenceNoImply(restSeq.slice(0,firstTO))
       val ret2 = parseTSequenceNoImply(restSeq.slice(firstTO+1,restSeq.size))
       val temp = ( 0 until timeOp.upperCycles-timeOp.lowerCycles).foldLeft(ret2._2)((p, _) =>{ p || past(p) })
-      val total = past(ret1._2,ret1._1+timeOp.upperCycles) && temp
+      val total = past(ret1._2,ret2._1+timeOp.upperCycles) && temp
       (ret1._1+timeOp.upperCycles+ret2._1,total)
     }
   }
@@ -99,10 +99,15 @@ object TSequence
       ret = (ret1._1+ret2._1-1,!past(ret1._2,ret2._1-1) || ret2._2)
     }
     val delay:UInt = (ret._1-1).asUInt
-    val cntReg = RegInit(0.U(delay.getWidth))
+    println(s"delay is $delay")
+    /*val cntReg = RegInit(0.U(delay.getWidth))
     when(cntReg < delay){
       cntReg := cntReg + 1.U
     }
-    ret._2 || cntReg === delay
+    when(cntReg === delay){
+      println("can reach delay")
+    }
+    || cntReg < delay*/
+    ret._2 
   }
 }
