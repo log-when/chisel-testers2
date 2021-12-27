@@ -73,9 +73,17 @@ object TSequence
       val timeOp = restSeq(firstTO).asInstanceOf[TimeOp]
       val ret1 = parseTSequenceNoImply(restSeq.slice(0,firstTO))
       val ret2 = parseTSequenceNoImply(restSeq.slice(firstTO+1,restSeq.size))
-      val temp = ( 0 until timeOp.upperCycles-timeOp.lowerCycles).foldLeft(ret2._2)((p, _) =>{ p || past(p) })
-      val total = past(ret1._2,ret2._1+timeOp.upperCycles) && temp
-      (ret1._1+timeOp.upperCycles+ret2._1,total)
+      val temp = ( 0 until timeOp.upperCycles-timeOp.lowerCycles+1).foldLeft(ret2._2)((p, _) =>{ p || past(p) })
+      if(ret1._1 == 0)
+      {
+        //val total = past(ret1._2,ret2._1+timeOp.upperCycles-1) && temp
+        (ret1._1+timeOp.upperCycles+ret2._1,temp)
+      }
+      else
+      {
+        val total = past(ret1._2,ret2._1+timeOp.upperCycles) && temp
+        (ret1._1+timeOp.upperCycles+ret2._1,total)
+      }
     }
   }
 
@@ -96,11 +104,18 @@ object TSequence
       lastImply = deletedSeq.lastIndexOf(Implication())
       val ret1 = parseTSequenceNoImply(deletedSeq.slice(0,lastImply))
       val ret2 = parseTSequenceNoImply(deletedSeq.slice(lastImply+1,deletedSeq.size))
-      ret = (ret1._1+ret2._1-1,!past(ret1._2,ret2._1-1) || ret2._2)
+      if(ret1._1 == 0)
+      {
+        ret = ret2
+      }
+      else
+      {
+        ret = (ret1._1+ret2._1-1,!past(ret1._2,ret2._1-1) || ret2._2)
+      }
     }
-    val delay:UInt = (ret._1-1).asUInt
+    /*val delay:UInt = (ret._1-1).asUInt
     println(s"delay is $delay")
-    /*val cntReg = RegInit(0.U(delay.getWidth))
+    val cntReg = RegInit(0.U(delay.getWidth))
     when(cntReg < delay){
       cntReg := cntReg + 1.U
     }
