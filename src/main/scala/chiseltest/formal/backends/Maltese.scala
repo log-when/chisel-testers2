@@ -2,6 +2,7 @@
 
 package chiseltest.formal.backends
 
+import chiseltest.formal._
 import chiseltest.formal.backends.btor.BtormcModelChecker
 import chiseltest.formal.backends.smt._
 import chiseltest.formal.{DoNotModelUndef, DoNotOptimizeFormal, FailedBoundedCheckException}
@@ -107,8 +108,11 @@ private[chiseltest] object Maltese {
   private case class SysInfo(sys: TransitionSystem, stateMap: Map[String, String], memDepths: Map[String, Int])
 
   private def toTransitionSystem(circuit: ir.Circuit, annos: AnnotationSeq): SysInfo = {
+
     val logLevel = Seq() // Seq("-ll", "info")
+    // We need to add DoNotOptimizeFormal, else targets in SVAannotation will be eliminated.
     val opts: AnnotationSeq = if (annos.contains(DoNotOptimizeFormal)) Seq() else Optimizations
+    //SMTEmitter depends on FirrtlToTransitionSystem transform 
     val res = firrtlPhase.transform(
       Seq(
         RunFirrtlTransformAnnotation(Dependency(SMTLibEmitter)),
@@ -119,7 +123,7 @@ private[chiseltest] object Maltese {
     val stateMap = FlattenPass.getStateMap(circuit.main, res)
     val memDepths = FlattenPass.getMemoryDepths(circuit.main, res)
     val sys = res.collectFirst { case TransitionSystemAnnotation(s) => s }.get
-
+    
     // print the system, convenient for debugging, might disable once we have done more testing
     if (true) {
       val targetDir = Compiler.requireTargetDir(annos)

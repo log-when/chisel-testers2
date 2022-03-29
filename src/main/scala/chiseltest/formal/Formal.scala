@@ -10,6 +10,7 @@ import chiseltest.simulator.{Compiler, WriteVcdAnnotation}
 import firrtl.{AnnotationSeq, CircuitState}
 import firrtl.annotations.NoTargetAnnotation
 import firrtl.transforms.formal.DontAssertSubmoduleAssumptionsAnnotation
+import java.lang.annotation.Annotation
 
 sealed trait FormalOp extends NoTargetAnnotation
 case class BoundedCheck(kMax: Int = -1) extends FormalOp
@@ -57,6 +58,18 @@ private object Formal {
     // add reset assumptions
     val withReset = AddResetAssumptionPass.execute(lowFirrtl)
 
+    val SVAAnnos : AnnotationSeq = withReset.annotations.filter {_.isInstanceOf[SVAAnno]}
+    // val SVAAnnos_ = SVAAnnos.toSeq.flatMap{_.asInstanceOf[SVAAnno].flat()}.filter(_.asInstanceOf[SVAAnno].sameModule)
+    // println(SVAAnnos.toSeq)
+    /*SVAAnnos_.map
+    {
+      case a:SVAAnno => {
+        println(a)
+        a
+      }
+      case _ => 
+    }*/
+    //println(SVAAnnos_.toSeq.toString)
     // execute operations
     val resetLength = AddResetAssumptionPass.getResetLength(withDefaults)
     ops.foreach(executeOp(withReset, resetLength, _))
