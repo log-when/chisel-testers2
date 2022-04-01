@@ -20,6 +20,15 @@ case class AtmPropAnno(target:Target) extends TSeqElementAnno
 
 case class TimeOpAnno(lowerCycles: Int, upperCycles: Int) extends TSeqElementAnno
 
+case class LeftbraketAnno() extends TSeqElementAnno
+
+case class RightbraketAnno() extends TSeqElementAnno
+
+case class NotAnno() extends TSeqElementAnno
+
+case class ImplicationAnno() extends TSeqElementAnno
+
+case class SVANode(ele:TSeqElementAnno, left:SVANode, right: SVANode)
 /*case class SAnno(targets: Seq[Target]) extends MultiTargetAnnotation
 {
   override def duplicate(a: Seq[Seq[Target]]) = this.copy(targets = a)
@@ -28,7 +37,54 @@ case class TimeOpAnno(lowerCycles: Int, upperCycles: Int) extends TSeqElementAnn
 }*/
 //case class SomeAnno(t0: Target, t1: Target, yourOwnMetaData: XXX) extends MultiTargetAnnotaion
 
+object SVAAnno
+{
+  def toSVATree(seq:Seq[TSeqElementAnno]): SVANode = {
+  if( seq.isEmpty ){
+      None
+    }
+    else{
+      seq(0) match {
+        case NotAnno() => SVANode(NotAnno,toSVATree(seq.slice(1,seq.size)),None)
+        case LeftbraketAnno() => {
+          var n = 1
+          var bre = false
+          var left = -1
+          for(i <- 1 until seq.size)
+          {
+            if(n != 0)
+            {
+              seq(i) match 
+              {
+                case LeftbraketAnno => n = n + 1
+                case RightbraketAnno => n = n - 1
+              }
+              if(n = 0)
+                left = i
+            }
+          }
+          toSVATree(seq.slice(1,left))
+        }
+        case RightbraketAnno() => {println("mistake!") None}
+        case _ => {
+          val firstImp = seq.indexWhere(_.isInstanceOf[ImplicationAnno])
+          if(firstImp = -1)
+          {
+            val firstTime = seq.indexWhere(_.isInstanceOf[TimeOpAnno])
+            SVANode(seq(firstTime), toSVATree(seq.slice(0,firstTime-1)), toSVATree(seq.slice(firstTime+1,seq.size)))
+          }
+          else
+          {
+            SVANode(ImplicationAnno(), toSVATree(seq.slice(0,firstImp-1)), toSVATree(seq.slice(firstImp+1,seq.size)))
+          }
 
+        }
+      }
+    }
+
+    
+  }
+}
 case class SVAAnno(ttargets: Seq[Seq[TSeqElementAnno]]) extends MultiTargetAnnotation{
   /*println(ttargets.toSeq.toString)
   println(ttargets.map(Seq(_)).toSeq.toString)*/
