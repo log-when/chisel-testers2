@@ -40,12 +40,20 @@ case class SVANode(ele:TSeqElementAnno, left:SVANode, right: SVANode)
 object SVAAnno
 {
   def toSVATree(seq:Seq[TSeqElementAnno]): SVANode = {
-  if( seq.isEmpty ){
-      None
+    if( seq.isEmpty )
+    {
+      null
+    }
+    else if(seq.size == 1)
+    {
+      seq(0) match {
+        case AtmPropAnno(target) => SVANode(AtmPropAnno(target), null, null)
+        case _ => null
+      }
     }
     else{
       seq(0) match {
-        case NotAnno() => SVANode(NotAnno,toSVATree(seq.slice(1,seq.size)),None)
+        case NotAnno() => SVANode(NotAnno(),toSVATree(seq.slice(1,seq.size)),null)
         case LeftbraketAnno() => {
           var n = 1
           var bre = false
@@ -54,37 +62,57 @@ object SVAAnno
           {
             if(n != 0)
             {
-              seq(i) match 
-              {
-                case LeftbraketAnno => n = n + 1
-                case RightbraketAnno => n = n - 1
-              }
-              if(n = 0)
+              if(seq(i).isInstanceOf[LeftbraketAnno])
+                n = n + 1
+              else if(seq(i).isInstanceOf[LeftbraketAnno])
+                n = n - 1
+              if(n == 0)
                 left = i
             }
           }
           toSVATree(seq.slice(1,left))
         }
-        case RightbraketAnno() => {println("mistake!") None}
+        case RightbraketAnno() => {println("mistake!"); null}
+        // case AtmPropAnno(target) => SVANode(AtmPropAnno(target), null, null)
         case _ => {
           val firstImp = seq.indexWhere(_.isInstanceOf[ImplicationAnno])
-          if(firstImp = -1)
+          if(firstImp == -1)
           {
             val firstTime = seq.indexWhere(_.isInstanceOf[TimeOpAnno])
-            SVANode(seq(firstTime), toSVATree(seq.slice(0,firstTime-1)), toSVATree(seq.slice(firstTime+1,seq.size)))
+            println(firstTime)
+            if(firstTime < seq.size)
+              SVANode(seq(firstTime), toSVATree(seq.slice(0,firstTime)), toSVATree(seq.slice(firstTime+1,seq.size)))
+            else
+              SVANode(seq(firstTime), toSVATree(seq.slice(0,firstTime)), null)
           }
           else
           {
-            SVANode(ImplicationAnno(), toSVATree(seq.slice(0,firstImp-1)), toSVATree(seq.slice(firstImp+1,seq.size)))
+            SVANode(ImplicationAnno(), toSVATree(seq.slice(0,firstImp)), toSVATree(seq.slice(firstImp+1,seq.size)))
           }
-
         }
       }
     }
+  }
 
-    
+  def generateMap2p(seq:Seq[TSeqElementAnno]) : Map[Target,String] =
+  {
+    var i:Int = 0
+    val temp = seq.collect{case AtmPropAnno(target) => target}.distinct
+    temp.map(a => a->("p" + {i+=1; i})).toMap
+  }
+
+  def toPSL(syntaxTree: SVANode, rename2p: Map[Target,String]) : String = 
+  {
+    syntaxTree match {
+      case SVANode(ImplicationAnno(),left,right) => "{" + toPSL(left,rename2p) + "}" +"[]->" + toPSL(right,rename2p)
+      case SVANode(AtmPropAnno(target),null,null) => {rename2p(target)}
+      case SVANode(TimeOpAnno(lc,hc),left,right) => toPSL(left,rename2p) + ";"+ "true[*"+lc + ".." + hc + "]" +";"+ toPSL(right,rename2p)
+      case null => ""
+      case _ => {println("unsupported operator"); ""}
+    }
   }
 }
+
 case class SVAAnno(ttargets: Seq[Seq[TSeqElementAnno]]) extends MultiTargetAnnotation{
   /*println(ttargets.toSeq.toString)
   println(ttargets.map(Seq(_)).toSeq.toString)*/
@@ -99,7 +127,6 @@ case class SVAAnno(ttargets: Seq[Seq[TSeqElementAnno]]) extends MultiTargetAnnot
     this.copy(Seq(Seq(AtmPropAnno(tt(0))))) 
   }
   
-    
   //Seq(duplicate(targets.map(ts => ts.flatMap(renames(_)))))
   override def update(renames: RenameMap) :Seq[Annotation]= 
   {
@@ -107,7 +134,7 @@ case class SVAAnno(ttargets: Seq[Seq[TSeqElementAnno]]) extends MultiTargetAnnot
       ts => ts.flatMap
       {
         case AtmPropAnno(target) => renames(target).map{AtmPropAnno(_)}
-        case TimeOpAnno(lowerCycles, upperCycles) => Seq(TimeOpAnno(lowerCycles, upperCycles))
+        case a => Seq(a)
       }
   )))
   }
@@ -134,7 +161,8 @@ case class SVAAnno(ttargets: Seq[Seq[TSeqElementAnno]]) extends MultiTargetAnnot
         }
     }
   override def flat(): AnnotationSeq = crossJoin(ttargets).map(r => this.copy(r.map(Seq(_))))
-    
+  
+  def toElementSeq(): Seq[TSeqElementAnno] = ttargets.flatMap(_.slice(0,1))
     //println("--------")
     /*ttargets.map{
       case Seq(AtmPropAnno(target)) => 

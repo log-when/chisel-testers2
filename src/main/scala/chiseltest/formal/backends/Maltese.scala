@@ -94,7 +94,7 @@ private[chiseltest] object Maltese {
   private val Optimizations: AnnotationSeq = Seq(
     RunFirrtlTransformAnnotation(Dependency[firrtl.transforms.ConstantPropagation]),
     RunFirrtlTransformAnnotation(Dependency(passes.CommonSubexpressionElimination)),
-    RunFirrtlTransformAnnotation(Dependency[firrtl.transforms.DeadCodeElimination])
+    // RunFirrtlTransformAnnotation(Dependency[firrtl.transforms.DeadCodeElimination])
   )
 
   private val DefRandomAnnos: AnnotationSeq = Seq(
