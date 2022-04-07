@@ -11,16 +11,8 @@ import firrtl.{AnnotationSeq, CircuitState}
 import firrtl.annotations.NoTargetAnnotation
 import firrtl.transforms.formal.DontAssertSubmoduleAssumptionsAnnotation
 import sys.process._
-import java.io.File
-
-import roll.parser.hoa._
-import roll.automata.NBA
-import roll.automata.operations.NBAOperations
-import roll.bdd.BDDManager
-import roll.main.Options
-import roll.parser.Parser
-import roll.parser.UtilParser
-import roll.words.Alphabet
+import java.io._
+import jhoafparser.parser.HOAFParser
 
 sealed trait FormalOp extends NoTargetAnnotation
 case class BoundedCheck(kMax: Int = -1) extends FormalOp
@@ -80,10 +72,27 @@ private object Formal {
 
     val targetDir = Compiler.requireTargetDir(annos)
     val cmd = Seq("ltl2tgba","-B","-D", "-f", psl)
-    val r = os.proc(cmd).call(cwd = targetDir, check = false)                    
-    print(r)
+    val r = os.proc(cmd).call(cwd = targetDir, check = false)         
+    println("---")           
+    println(r.out.string)
+    println("---")
 
-     val hoaParser = new ParserHOA()
+    val is = new ByteArrayInputStream(r.out.string.getBytes())
+    // 转 BufferedInputStream
+    val bis = new BufferedInputStream(is)    
+    // 打印
+    //Stream.continually(bis.read()).takeWhile(_ != -1).foreach(println(_))
+    val h = new hoaParser()
+    HOAFParser.parseHOA(bis,h)    
+    bis.close()
+    is.close()
+
+    println(h.transitionFunc)
+
+
+
+    
+     //val hoaParser = new ParserHOA()
     // val SVAAnnos_ = SVAAnnos.toSeq.flatMap{_.asInstanceOf[SVAAnno].flat()}.filter(_.asInstanceOf[SVAAnno].sameModule)
     // println(SVAAnnos.toSeq)
     /*SVAAnnos_.map
