@@ -106,7 +106,12 @@ object SVAAnno
     syntaxTree match {
       case SVANode(ImplicationAnno(),left,right) => "{" + toPSL(left,rename2p) + "}" +"[]->" + toPSL(right,rename2p)
       case SVANode(AtmPropAnno(target),null,null) => {rename2p(target)}
-      case SVANode(TimeOpAnno(lc,hc),left,right) => toPSL(left,rename2p) + ";"+ "true[*"+lc + ".." + hc + "]" +";"+ toPSL(right,rename2p)
+      case SVANode(TimeOpAnno(lc,hc),left,right) => {
+        if(hc != -1)
+          toPSL(left,rename2p) + ";"+ "true[*" + lc + ".." + hc + "]" +";"+ toPSL(right,rename2p)
+        else 
+          toPSL(left,rename2p) + ";"+ "true[*" + lc + "]" + ";" + "true[*]" +";"+ toPSL(right,rename2p)
+      }
       case null => ""
       case _ => {println("unsupported operator"); ""}
     }
