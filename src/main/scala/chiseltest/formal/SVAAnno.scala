@@ -28,6 +28,14 @@ case class NotAnno() extends TSeqElementAnno
 
 case class ImplicationAnno() extends TSeqElementAnno
 
+case class FinallAnno() extends TSeqElementAnno
+
+case class GlobalAnno() extends TSeqElementAnno
+
+case class NextAnno() extends TSeqElementAnno
+
+case class RepetAnno() extends TSeqElementAnno
+
 case class SVANode(ele:TSeqElementAnno, left:SVANode, right: SVANode)
 /*case class SAnno(targets: Seq[Target]) extends MultiTargetAnnotation
 {
@@ -54,6 +62,9 @@ object SVAAnno
     else{
       seq(0) match {
         case NotAnno() => SVANode(NotAnno(),toSVATree(seq.slice(1,seq.size)),null)
+        case FinallAnno() => SVANode(FinallAnno(),toSVATree(seq.slice(1,seq.size)),null)
+        case GlobalAnno() => SVANode(GlobalAnno(),toSVATree(seq.slice(1,seq.size)),null)
+        case NextAnno() => SVANode(NextAnno(),toSVATree(seq.slice(1,seq.size)),null)
         case LeftbraketAnno() => {
           var n = 1
           var bre = false
@@ -64,26 +75,38 @@ object SVAAnno
             {
               if(seq(i).isInstanceOf[LeftbraketAnno])
                 n = n + 1
-              else if(seq(i).isInstanceOf[LeftbraketAnno])
+              else if(seq(i).isInstanceOf[RightbraketAnno])
                 n = n - 1
               if(n == 0)
                 left = i
             }
           }
+          println(s"right: $left")
           toSVATree(seq.slice(1,left))
         }
         case RightbraketAnno() => {println("mistake!"); null}
         // case AtmPropAnno(target) => SVANode(AtmPropAnno(target), null, null)
         case _ => {
+          //pay attention
+          //there exists some bug to be fixed!!!
+          //pay attention
           val firstImp = seq.indexWhere(_.isInstanceOf[ImplicationAnno])
           if(firstImp == -1)
           {
-            val firstTime = seq.indexWhere(_.isInstanceOf[TimeOpAnno])
-            println(firstTime)
-            if(firstTime < seq.size)
-              SVANode(seq(firstTime), toSVATree(seq.slice(0,firstTime)), toSVATree(seq.slice(firstTime+1,seq.size)))
+            val lastRepet = seq.lastIndexWhere(_.isInstanceOf[RepetAnno])
+            if(lastRepet == -1)
+            {
+              val firstTime = seq.indexWhere(_.isInstanceOf[TimeOpAnno])
+              println(firstTime)
+              if(firstTime < seq.size)
+                SVANode(seq(firstTime), toSVATree(seq.slice(0,firstTime)), toSVATree(seq.slice(firstTime+1,seq.size)))
+              else
+                SVANode(seq(firstTime), toSVATree(seq.slice(0,firstTime)), null)
+            }
             else
-              SVANode(seq(firstTime), toSVATree(seq.slice(0,firstTime)), null)
+            {
+              SVANode(RepetAnno(), toSVATree(seq.slice(0,lastRepet)), toSVATree(seq.slice(lastRepet+1,seq.size)))
+            }
           }
           else
           {
@@ -112,8 +135,14 @@ object SVAAnno
         else 
           toPSL(left,rename2p) + ";"+ "true[*" + lc + "]" + ";" + "true[*]" +";"+ toPSL(right,rename2p)
       }
+      case SVANode(NotAnno(),left,right) => "!(" + toPSL(left,rename2p) +")"
+      case SVANode(FinallAnno(),left,right) => "F " + toPSL(left,rename2p)
+      case SVANode(GlobalAnno(),left,right) => "G " + toPSL(left,rename2p)
+      case SVANode(NextAnno(),left,right) => "X " + toPSL(left,rename2p)
+      case SVANode(RepetAnno(),left,right) => "(" + toPSL(left,rename2p) + ")" + "[*]"
+      
       case null => ""
-      case _ => {println("unsupported operator"); ""}
+      case a => {println("unsupported operator"); ""}
     }
   }
 }

@@ -14,4 +14,12 @@ case class Leftbraket() extends TSeqElement
 
 case class Rightbraket() extends TSeqElement
 
-case class Not() extends TSeqElement
+case class NotOp() extends TSeqElement
+
+case class FinallOp() extends TSeqElement
+
+case class GlobalOp() extends TSeqElement
+
+case class NextOp() extends TSeqElement
+
+case class RepetOp() extends TSeqElement

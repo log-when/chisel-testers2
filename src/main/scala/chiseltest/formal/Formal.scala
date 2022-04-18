@@ -67,12 +67,12 @@ private object Formal {
     println(target2p)
     val syntaxTree = SVAAnno.toSVATree(teemp)
     println(SVAAnno.toSVATree(teemp))
-    //val psl = SVAAnno.toPSL(syntaxTree,target2p)
+    val psl = SVAAnno.toPSL(syntaxTree,target2p)
     
     //!!!!!!!!!!!!!!!!!!!!
     //Attention, there chooses a special psl to test!
     //!!!!!!!!!!!!!!!!!!!!
-    val psl = "{(p | q)[*]}<>->Gp"
+    /*val psl = "{(p | q)[*]}<>->Gp"
     println(SVAAnno.toPSL(syntaxTree,target2p))
 
     val targetDir = Compiler.requireTargetDir(annos)
@@ -91,12 +91,13 @@ private object Formal {
     HOAFParser.parseHOA(bis,h)    
     bis.close()
     is.close()
-
     
     h.partialDeterministic()
-
     println("//////////////////////////")
     println(h.transitionFunc)
+    h.addAuxVar()
+    println("//////////////////////////")
+    println(h.transitionFunc)*/
 
 
 
