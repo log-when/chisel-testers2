@@ -14,6 +14,7 @@ case class APAnno(val target: ReferenceTarget) extends SingleTargetAnnotation[Re
 }
 
 
+
 trait TSeqElementAnno
 
 case class AtmPropAnno(target:Target) extends TSeqElementAnno
@@ -35,6 +36,9 @@ case class GlobalAnno() extends TSeqElementAnno
 case class NextAnno() extends TSeqElementAnno
 
 case class RepetAnno() extends TSeqElementAnno
+
+
+
 
 case class SVANode(ele:TSeqElementAnno, left:SVANode, right: SVANode)
 /*case class SAnno(targets: Seq[Target]) extends MultiTargetAnnotation
@@ -63,8 +67,6 @@ object SVAAnno
       seq(0) match {
         case NotAnno() => SVANode(NotAnno(),toSVATree(seq.slice(1,seq.size)),null)
         case FinallAnno() => SVANode(FinallAnno(),toSVATree(seq.slice(1,seq.size)),null)
-        case GlobalAnno() => SVANode(GlobalAnno(),toSVATree(seq.slice(1,seq.size)),null)
-        case NextAnno() => SVANode(NextAnno(),toSVATree(seq.slice(1,seq.size)),null)
         case LeftbraketAnno() => {
           var n = 1
           var bre = false
@@ -137,8 +139,6 @@ object SVAAnno
       }
       case SVANode(NotAnno(),left,right) => "!(" + toPSL(left,rename2p) +")"
       case SVANode(FinallAnno(),left,right) => "F " + toPSL(left,rename2p)
-      case SVANode(GlobalAnno(),left,right) => "G " + toPSL(left,rename2p)
-      case SVANode(NextAnno(),left,right) => "X " + toPSL(left,rename2p)
       case SVANode(RepetAnno(),left,right) => "(" + toPSL(left,rename2p) + ")" + "[*]"
       
       case null => ""
