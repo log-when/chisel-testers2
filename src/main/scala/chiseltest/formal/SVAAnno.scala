@@ -145,6 +145,20 @@ object SVAAnno
       case a => {println("unsupported operator"); ""}
     }
   }
+
+
+  def SVAAnno2PSL(s: SVAAnno) : Tuple2[String, Map[String,Target]] = 
+  {
+    val elementSVA = s.toElementSeq().toSeq
+    println(s"elementSVA: $elementSVA")
+    val target2p = SVAAnno.generateMap2p(elementSVA)
+    val p2target = target2p.toSeq.map{case Tuple2(k,v) => Tuple2(v,k)}.toMap
+    println(p2target)
+    val syntaxTree = SVAAnno.toSVATree(elementSVA)
+    println(SVAAnno.toSVATree(elementSVA))
+    val psl = SVAAnno.toPSL(syntaxTree,target2p)
+    (psl,p2target)
+  }
 }
 
 case class SVAAnno(ttargets: Seq[Seq[TSeqElementAnno]]) extends MultiTargetAnnotation{
