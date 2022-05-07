@@ -1,9 +1,10 @@
-/*package chiseltest.formal
+package chiseltest.formal
 
 import chisel3._
 import chiseltest.formal.past
 import scala.util.control.Breaks._
 import scala.language.postfixOps
+import scala.collection.mutable
 
 object TSequence
 {
@@ -65,17 +66,75 @@ object TSequence
     {
       (1,restSeq(0).asInstanceOf[AtmProp].signal)
     }
+    // else if(restSeq.size == 2 && restSeq(0).isInstanceOf[AtmProp] && restSeq(1).isInstanceOf[RepetOp])
+    // {
+    //   println("this!!!")
+    //   val ap:AtmProp = restSeq(0).asInstanceOf[AtmProp]
+    //   val repOp:RepetOp = restSeq(1).asInstanceOf[RepetOp]
+    //   val lowerBounds = repOp.lowerBounds
+    //   val upperBounds = repOp.upperBounds
+    //   val beforeLower = (0 until lowerBounds).foldLeft(past(ap.signal,lowerBounds))((p, _) =>{ p && past(p) })
+    //   (upperBounds, ( 0 until upperBounds-lowerBounds).foldLeft(ap.signal)((p, _) =>{ p || past(p) }) && beforeLower )  
+    //   //(1,restSeq(0).asInstanceOf[AtmProp].signal)
+    // }
     else
     {
-      val firstTO:Int = restSeq.indexWhere(_.isInstanceOf[TimeOp])
-      //println(firstTO)
-      //println(restSeq.toString())
-      val timeOp = restSeq(firstTO).asInstanceOf[TimeOp]
-      val ret1 = parseTSequenceNoImply(restSeq.slice(0,firstTO))
-      val ret2 = parseTSequenceNoImply(restSeq.slice(firstTO+1,restSeq.size))
-      val temp = ( 0 until timeOp.upperCycles-timeOp.lowerCycles).foldLeft(ret2._2)((p, _) =>{ p || past(p) })
-      val total = past(ret1._2,ret2._1+timeOp.upperCycles) && temp
-      (ret1._1+timeOp.upperCycles+ret2._1,total)
+      if(restSeq.size == 2 && restSeq(0).isInstanceOf[AtmProp] && restSeq(1).isInstanceOf[RepetOp])
+      {
+         val ap:AtmProp = restSeq(0).asInstanceOf[AtmProp]
+         val repOp:RepetOp = restSeq(1).asInstanceOf[RepetOp]
+         val lowerBounds = repOp.lowerBounds
+         val beforeLower = (0 until lowerBounds-1).foldLeft(ap.signal)((p, _) =>{ p && past(p) })
+         (lowerBounds,beforeLower)
+      }
+      else
+      {
+        val firstTO:Int = restSeq.indexWhere(_.isInstanceOf[TimeOp])
+        //println(firstTO)
+        //println(restSeq.toString())
+        if(firstTO > 0 && restSeq(firstTO-1).isInstanceOf[RepetOp])
+        {
+          val ap:AtmProp = restSeq(firstTO-2).asInstanceOf[AtmProp]
+          val repOp:RepetOp = restSeq(firstTO-1).asInstanceOf[RepetOp]
+          val lowerBounds = repOp.lowerBounds
+          val upperBounds = repOp.upperBounds
+
+          val ret2 = parseTSequenceNoImply(restSeq.slice(firstTO,restSeq.size))
+          val beforeLower = past((0 until lowerBounds-1).foldLeft(ap.signal)((p, _) =>{ p && past(p) }), (upperBounds-lowerBounds+ret2._1))
+          var temp:mutable.Seq[Bool] = mutable.Seq(past(ap.signal,ret2._1))
+          for(i <- 1 until upperBounds-lowerBounds)
+          {
+            temp :+= past(temp(i-1))
+          }
+          temp = temp.reverse
+          for(i <- 1 until upperBounds-lowerBounds)
+          {
+            temp(i) = temp(i) && temp(i-1)
+          }
+          temp +:= true.B
+          var temp2:mutable.Seq[Bool] = mutable.Seq(ret2._2)
+          for(i <- 1 until upperBounds-lowerBounds+1)
+          {
+            temp2 :+= past(temp(i-1))
+          }
+          temp2 = temp2.reverse
+          var partialExpr = temp(0) && temp2(0)
+          for(i <- 1 until temp.size)
+          {
+            partialExpr = partialExpr || (temp(i) && temp2(i))
+          }
+          (ret2._1+upperBounds,partialExpr && beforeLower)
+        }
+        else
+        {
+          val timeOp = restSeq(firstTO).asInstanceOf[TimeOp]
+          val ret1 = parseTSequenceNoImply(restSeq.slice(0,firstTO))
+          val ret2 = parseTSequenceNoImply(restSeq.slice(firstTO+1,restSeq.size))
+          val temp = ( 0 until timeOp.upperCycles-timeOp.lowerCycles).foldLeft(ret2._2)((p, _) =>{ p || past(p) })
+          val total = past(ret1._2,ret2._1+timeOp.upperCycles) && temp
+          (ret1._1+timeOp.upperCycles+ret2._1,total)
+        }
+      }
     }
   }
 
@@ -110,4 +169,4 @@ object TSequence
     || cntReg < delay*/
     ret._2 
   }
-}*/
+}

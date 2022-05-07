@@ -5,7 +5,7 @@ import chisel3._
 
 trait TSeqElement
 
-case class AtmProp(signal:UInt) extends TSeqElement
+case class AtmProp(signal:Bool) extends TSeqElement
 
 case class TimeOp(lowerCycles: Int, upperCycles: Int) extends TSeqElement
 
@@ -23,7 +23,7 @@ case class GlobalOp() extends TSeqElement
 
 case class NextOp() extends TSeqElement
 
-case class RepetOp() extends TSeqElement
+case class RepetOp(lowerBounds:Int, upperBounds: Int) extends TSeqElement
 
 
 object TTSeq
