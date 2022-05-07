@@ -60,14 +60,14 @@ private object Formal {
     // add reset assumptions
     val withReset = AddResetAssumptionPass.execute(lowFirrtl)
 
-    val SVAAnnos : AnnotationSeq = withReset.annotations.filter {_.isInstanceOf[SVAAnno]}
+    /*val SVAAnnos : AnnotationSeq = withReset.annotations.filter {_.isInstanceOf[SVAAnno]}
     val teemp = SVAAnnos(0).asInstanceOf[SVAAnno].toElementSeq().toSeq
     println(teemp)
     val target2p = SVAAnno.generateMap2p(teemp)
     println(target2p)
     val syntaxTree = SVAAnno.toSVATree(teemp)
     println(SVAAnno.toSVATree(teemp))
-    val psl = SVAAnno.toPSL(syntaxTree,target2p)
+    val psl = SVAAnno.toPSL(syntaxTree,target2p)*/
     
     //!!!!!!!!!!!!!!!!!!!!
     //Attention, there chooses a special psl to test!

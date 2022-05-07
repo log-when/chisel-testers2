@@ -156,7 +156,7 @@ object SVAAnno
     println(p2target)
     val syntaxTree = SVAAnno.toSVATree(elementSVA)
     println(SVAAnno.toSVATree(elementSVA))
-    val psl = SVAAnno.toPSL(syntaxTree,target2p)
+    val psl = "!" + SVAAnno.toPSL(syntaxTree,target2p)
     (psl,p2target)
   }
 }
