@@ -1,14 +1,14 @@
 package chiseltest.formal
 
 import chisel3._
-import chiseltest.formal.past
+import chiseltest.formal.past._
 import scala.util.control.Breaks._
 import scala.language.postfixOps
 import scala.collection.mutable
 
 object TSequence
 {
-  def apply(input: Seq[TSeqElement]) = {
+  def apply(input: Seq[svaElement]) = {
     //val out = input.foldLeft(true.B)((p,q)=>parseTSequence(p,q))  
     val initInput = initTSeq(input)
     println(input.toString())
@@ -20,10 +20,10 @@ object TSequence
   }
 
 
-  private def initTSeq(input:Seq[TSeqElement]):Seq[TSeqElement] = 
+  private def initTSeq(input:Seq[svaElement]):Seq[svaElement] = 
   {
     import scala.collection.mutable.Seq
-    var retSeq = scala.collection.mutable.Seq[TSeqElement]()
+    var retSeq = scala.collection.mutable.Seq[svaElement]()
     for(i <- 0 until input.size)
     {
       if(retSeq.isEmpty)
@@ -56,7 +56,7 @@ object TSequence
     }
     retSeq.toSeq
   }
-  private def parseTSequenceNoImply(restSeq:Seq[TSeqElement]): (Int,Bool) =
+  private def parseTSequenceNoImply(restSeq:Seq[svaElement]): (Int,Bool) =
   {
     if(restSeq.size == 0)
     {
@@ -130,17 +130,17 @@ object TSequence
           val timeOp = restSeq(firstTO).asInstanceOf[TimeOp]
           val ret1 = parseTSequenceNoImply(restSeq.slice(0,firstTO))
           val ret2 = parseTSequenceNoImply(restSeq.slice(firstTO+1,restSeq.size))
-          val temp = ( 0 until timeOp.upperCycles-timeOp.lowerCycles).foldLeft(ret2._2)((p, _) =>{ p || past(p) })
-          val total = past(ret1._2,ret2._1+timeOp.upperCycles) && temp
-          (ret1._1+timeOp.upperCycles+ret2._1,total)
+          val temp = ( 0 until timeOp.upperBounds-timeOp.lowerBounds).foldLeft(ret2._2)((p, _) =>{ p || past(p) })
+          val total = past(ret1._2,ret2._1+timeOp.upperBounds) && temp
+          (ret1._1+timeOp.upperBounds+ret2._1,total)
         }
       }
     }
   }
 
-  private def parseTSequence(restSeq:Seq[TSeqElement]): (Bool) =
+  private def parseTSequence(restSeq:Seq[svaElement]): (Bool) =
   {
-    var lastImply:Int = restSeq.lastIndexOf(Implication())
+    var lastImply:Int = restSeq.lastIndexOf(ImplicationOp())
     var ret = (0,true.B)
     if(lastImply < 0)
     {
@@ -148,11 +148,11 @@ object TSequence
     }
     else
     {
-      val deletedSeq = restSeq.slice(0,lastImply).filter(!_.isInstanceOf[Implication]) ++ restSeq.slice(lastImply,restSeq.size)
+      val deletedSeq = restSeq.slice(0,lastImply).filter(!_.isInstanceOf[ImplicationOp]) ++ restSeq.slice(lastImply,restSeq.size)
       val deletedSeq_ = initTSeq(deletedSeq)
       //println("-------")
       //println(deletedSeq.toString())
-      lastImply = deletedSeq.lastIndexOf(Implication())
+      lastImply = deletedSeq.lastIndexOf(ImplicationOp())
       val ret1 = parseTSequenceNoImply(deletedSeq.slice(0,lastImply))
       val ret2 = parseTSequenceNoImply(deletedSeq.slice(lastImply+1,deletedSeq.size))
       ret = (ret1._1+ret2._1-1,!past(ret1._2,ret2._1-1) || ret2._2)

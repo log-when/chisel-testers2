@@ -59,62 +59,7 @@ private object Formal {
 
     // add reset assumptions
     val withReset = AddResetAssumptionPass.execute(lowFirrtl)
-
-    /*val SVAAnnos : AnnotationSeq = withReset.annotations.filter {_.isInstanceOf[SVAAnno]}
-    val teemp = SVAAnnos(0).asInstanceOf[SVAAnno].toElementSeq().toSeq
-    println(teemp)
-    val target2p = SVAAnno.generateMap2p(teemp)
-    println(target2p)
-    val syntaxTree = SVAAnno.toSVATree(teemp)
-    println(SVAAnno.toSVATree(teemp))
-    val psl = SVAAnno.toPSL(syntaxTree,target2p)*/
     
-    //!!!!!!!!!!!!!!!!!!!!
-    //Attention, there chooses a special psl to test!
-    //!!!!!!!!!!!!!!!!!!!!
-    /*val psl = "{(p | q)[*]}<>->Gp"
-    println(SVAAnno.toPSL(syntaxTree,target2p))
-
-    val targetDir = Compiler.requireTargetDir(annos)
-    val cmd = Seq("ltl2tgba","-B","-D", "-f", psl)
-    val r = os.proc(cmd).call(cwd = targetDir, check = false)         
-    println("---")           
-    println(r.out.string)
-    println("---")
-
-    val is = new ByteArrayInputStream(r.out.string.getBytes())
-    // 转 BufferedInputStream
-    val bis = new BufferedInputStream(is)    
-    // 打印
-    //Stream.continually(bis.read()).takeWhile(_ != -1).foreach(println(_))
-    val h = new hoaParser()
-    HOAFParser.parseHOA(bis,h)    
-    bis.close()
-    is.close()
-    
-    h.partialDeterministic()
-    println("//////////////////////////")
-    println(h.transitionFunc)
-    h.addAuxVar()
-    println("//////////////////////////")
-    println(h.transitionFunc)*/
-
-
-
-    
-     //val hoaParser = new ParserHOA()
-    // val SVAAnnos_ = SVAAnnos.toSeq.flatMap{_.asInstanceOf[SVAAnno].flat()}.filter(_.asInstanceOf[SVAAnno].sameModule)
-    // println(SVAAnnos.toSeq)
-    /*SVAAnnos_.map
-    {
-      case a:SVAAnno => {
-        println(a)
-        a
-      }
-      case _ => 
-    }*/
-    //println(SVAAnnos_.toSeq.toString)
-    // execute operations
     val resetLength = AddResetAssumptionPass.getResetLength(withDefaults)
     ops.foreach(executeOp(withReset, resetLength, _))
   }

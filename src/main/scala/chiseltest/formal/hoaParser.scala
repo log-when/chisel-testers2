@@ -55,10 +55,12 @@ class hoaParser extends HOAConsumer{
                 else
                 {
                     var mutualBddsCopy = mutualBdds.clone()
+                    var isExclusive = true
                     for(e <- mutualBddsCopy)
                     {
                         if(!(e.and(k).isZero()))
                         {
+                            isExclusive = false
                             mutualBdds += e.and(k)
                             updatedEdge += (e.and(k) -> (updatedEdge(e) ++ v))
 
@@ -77,8 +79,14 @@ class hoaParser extends HOAConsumer{
                             updatedEdge = updatedEdge-(e)                           
                         }
                     }
+                    if(isExclusive)
+                    {
+                        mutualBdds += k
+                        updatedEdge += (k -> v)
+                    }
                 }
             }
+            println(s"i=$i: $mutualBdds")
             var isFull = mutualBdds.fold(bdd.zero())((e1,e2)=>e1.or(e2))
 
             //println(isTrue)
@@ -155,7 +163,10 @@ class hoaParser extends HOAConsumer{
     override def setNumberOfStates(numberOfStates: Int): Unit =
     {
         stateNum = numberOfStates
-        stateBits = ceil(log(numberOfStates.toDouble + 1)).toInt
+        
+        stateBits = ceil(log(numberOfStates.toDouble + 1) / log(2)).toInt
+        println(s"log(numberOfStates.toDouble + 1): ${log(numberOfStates.toDouble + 1)}")
+        println(s"numberOfStates: $numberOfStates, stateBits: $stateBits")
     }
 
     @throws(classOf[HOAConsumerException])
@@ -185,6 +196,8 @@ class hoaParser extends HOAConsumer{
     {
         int2Ap = mutable.Map() ++ aps.asScala.zipWithIndex.map(a => (a._2, a._1)).toMap
         apNum = aps.size()
+        if(apNum == 0)
+            throw new UnsupportedOperationException("BA is empty, this assertion is meaningless")
         bdd.setVarNum(apNum)
     }
 

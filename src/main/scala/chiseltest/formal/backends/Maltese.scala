@@ -56,12 +56,33 @@ private[chiseltest] object Maltese {
       case ModelCheckFail(witness) =>
         val writeVcd = annos.contains(WriteVcdAnnotation)
         if (writeVcd) {
-          val sim = new TransitionSystemSimulator(sysInfo.sys)
-          sim.run(witness, vcdFileName = Some((targetDir / s"${circuit.main}.bmc.vcd").toString))
-          val trace = witnessToTrace(sysInfo, witness)
-          val treadleState = prepTreadle(circuit, annos, modelUndef)
-          val treadleDut = TreadleBackendAnnotation.getSimulator.createContext(treadleState)
-          Trace.replayOnSim(trace, treadleDut)
+          val firstBad:String = {witness.failed}.head
+          val isExtendedSVA = firstBad.slice(0,8) == "just2Bad"
+          println(s"isExtendedSVA: ${isExtendedSVA}")
+          // violated safety property is from assertion, try to simulate
+          if(!isExtendedSVA)
+          {
+            val sim = new TransitionSystemSimulator(sysInfo.sys)
+            sim.run(witness, vcdFileName = Some((targetDir / s"${circuit.main}.bmc.vcd").toString))
+            val trace = witnessToTrace(sysInfo, witness)
+            val treadleState = prepTreadle(circuit, annos, modelUndef)
+            val treadleDut = TreadleBackendAnnotation.getSimulator.createContext(treadleState)
+            Trace.replayOnSim(trace, treadleDut)
+          }
+          // violated safety property is from extended SVA-like assertion
+          // don't simulate, only output the lasso-shaped trace 
+          else
+          {
+            println(s"stateMap: ${sysInfo.stateMap}")
+            val inputNameMap = sysInfo.sys.inputs.map(_.name).map(name => name -> sysInfo.stateMap.getOrElse(name, name)).toMap
+            println(s"inputNameMap: $inputNameMap")
+            val stateNameMap = sysInfo.sys.states.map(_.name).filter(sysInfo.stateMap.contains(_)).map(name => name -> {
+                sysInfo.stateMap(name)
+            }).toMap  
+            println(s"stateNameMap: $stateNameMap")
+            val sim = new TransitionSystemSimulator(sysInfo.sys, inputNameMap, stateNameMap, isExtendedSVA)
+            sim.run(witness, vcdFileName = Some((targetDir / s"${circuit.main}.bmc.vcd").toString))
+          }
         }
         val failSteps = witness.inputs.length - 1 - resetLength
         throw FailedBoundedCheckException(circuit.main, failSteps)
@@ -170,9 +191,14 @@ private[chiseltest] object Maltese {
       .toIndexedSeq
     val stateNames = sysInfo.sys.states
       .map(_.name)
+      // .filter{
+      //   case s:String => s.last != '_'
+      // }
       // translate flattened state name to hierarchical path
-      .map(sysInfo.stateMap)
+      .map(name => sysInfo.stateMap.getOrElse(name, name))
       .toIndexedSeq
+      println(s"inputNames: $inputNames")
+      println(s"stateNames: $stateNames")
 
     Trace(
       inputs = w.inputs.map(_.toSeq.map { case (i, value) => inputNames(i) -> value }),
