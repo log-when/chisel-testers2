@@ -137,24 +137,26 @@ object svaSeqAnno
             bsp match {
               case TimeOp(lb,ub) =>
               {
-                if(i == seq.size - 1 || seq(i+1).isInstanceOf[Rightbraket] || seq(i).isInstanceOf[s_propBinOp] || seq(i).isInstanceOf[s_propUnOp])
-                {
-                  if(i == 0 || seq(i).isInstanceOf[Leftbraket] || seq(i).isInstanceOf[TimeOp])
-                    if(ub != -1)
-                      "true[*" + (lb-1) + ".." + ub + "]"
-                    else 
-                      "true[*" + (lb-1) + "]" + ";" + "true[*]"
-                  else
-                    if(ub != -1)
-                      ";true[*" + (lb-1) + ".." + ub + "]"
-                    else 
-                      ";true[*" + (lb-1) + "]" + ";" + "true[*]"
-                }
-                else
-                {
-                  val upperBounds:String = if(ub == -1) "$" else ub.toString()
-                  " ##[" + lb + ":" + upperBounds + "]"
-                }              
+                val upperBounds:String = if(ub == -1) "$" else ub.toString()
+                " ##[" + lb + ":" + upperBounds + "]"
+                // if(i == seq.size - 1 || seq(i+1).isInstanceOf[Rightbraket] || seq(i).isInstanceOf[s_propBinOp] || seq(i).isInstanceOf[s_propUnOp])
+                // {
+                //   if(i == 0 || seq(i).isInstanceOf[Leftbraket] || seq(i).isInstanceOf[TimeOp])
+                //     if(ub != -1)
+                //       "true[*" + (lb-1) + ".." + ub + "]"
+                //     else 
+                //       "true[*" + (lb-1) + "]" + ";" + "true[*]"
+                //   else
+                //     if(ub != -1)
+                //       ";true[*" + (lb-1) + ".." + ub + "]"
+                //     else 
+                //       ";true[*" + (lb-1) + "]" + ";" + "true[*]"
+                // }
+                // else
+                // {
+                //   val upperBounds:String = if(ub == -1) "$" else ub.toString()
+                //   " ##[" + lb + ":" + upperBounds + "]"
+                // }              
               }
               case OrSeqOp() => " | "
             }
@@ -230,24 +232,26 @@ object svaSeqAnno
           bsp match {
             case TimeOp(lb,ub) =>
             {
-              if(i == seq.size - 1 || seq(i+1).isInstanceOf[ImplicationOp] || seq(i+1).isInstanceOf[s_propUnOp])
-              {
-                if(i == 0 || seq(i-1).isInstanceOf[TimeOp])
-                  if(ub != -1)
-                    "true[*" + (lb-1) + ".." + ub + "]"
-                  else 
-                    "true[*" + (lb-1) + "]" + ";" + "true[*]"
-                else
-                  if(ub != -1)
-                    ";true[*" + (lb-1) + ".." + ub + "]"
-                  else 
-                    ";true[*" + (lb-1) + "]" + ";" + "true[*]"
-              }
-              else
-              {
-                val upperBounds:String = if(ub == -1) "$" else ub.toString()
+              val upperBounds:String = if(ub == -1) "$" else ub.toString()
                 " ##[" + lb + ":" + upperBounds + "]"
-              }
+              // if(i == seq.size - 1 || seq(i+1).isInstanceOf[ImplicationOp] || seq(i+1).isInstanceOf[s_propUnOp])
+              // {
+              //   if(i == 0 || seq(i-1).isInstanceOf[TimeOp])
+              //     if(ub != -1)
+              //       "true[*" + (lb-1) + ".." + ub + "]"
+              //     else 
+              //       "true[*" + (lb-1) + "]" + ";" + "true[*]"
+              //   else
+              //     if(ub != -1)
+              //       ";true[*" + (lb-1) + ".." + ub + "]"
+              //     else 
+              //       ";true[*" + (lb-1) + "]" + ";" + "true[*]"
+              // }
+              // else
+              // {
+              //   val upperBounds:String = if(ub == -1) "$" else ub.toString()
+              //   " ##[" + lb + ":" + upperBounds + "]"
+              // }
             }
             case OrSeqOp() => " | "
           }
