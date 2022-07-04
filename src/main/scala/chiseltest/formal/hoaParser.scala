@@ -86,7 +86,7 @@ class hoaParser extends HOAConsumer{
                     }
                 }
             }
-            println(s"i=$i: $mutualBdds")
+          //  println(s"i=$i: $mutualBdds")
             var isFull = mutualBdds.fold(bdd.zero())((e1,e2)=>e1.or(e2))
 
             //println(isTrue)
@@ -136,7 +136,7 @@ class hoaParser extends HOAConsumer{
             {
                 if(v.size > 1)
                 {
-                    println(s"need aux: $k")
+                  //  println(s"need aux: $k")
                     trans_.remove(k)
                     val neededAuxVar:Int = ceil(log(v.size)).toInt
                     if(neededAuxVar > auxVarNum)
@@ -151,7 +151,7 @@ class hoaParser extends HOAConsumer{
                         case Tuple2(a:Integer, b:Int) =>
                             Tuple2(k.and(int2Bdd(b,varSeq)),mutable.Set(a))
                     }.toMap
-                    println(s"need aux: $trans_")
+                  //  println(s"need aux: $trans_")
                 }
             }
             transitionFunc(i)  = trans_
@@ -165,8 +165,8 @@ class hoaParser extends HOAConsumer{
         stateNum = numberOfStates
         
         stateBits = ceil(log(numberOfStates.toDouble + 1) / log(2)).toInt
-        println(s"log(numberOfStates.toDouble + 1): ${log(numberOfStates.toDouble + 1)}")
-        println(s"numberOfStates: $numberOfStates, stateBits: $stateBits")
+      //  println(s"log(numberOfStates.toDouble + 1): ${log(numberOfStates.toDouble + 1)}")
+      //  println(s"numberOfStates: $numberOfStates, stateBits: $stateBits")
     }
 
     @throws(classOf[HOAConsumerException])

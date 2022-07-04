@@ -58,9 +58,11 @@ object svaSeq
     implicit def uint2Atm(signal:Bool): svaSeq = new svaSeq(Seq(AtmProp(signal)))    
     def ap(signal:Bool): svaSeq = new svaSeq(Seq(AtmProp(signal)))
     def ###(lowerBounds: Int, upperBounds: Int): svaSeq = new svaSeq(Seq(TimeOp(lowerBounds, upperBounds)))
+    def ###(lowerBounds: Int): svaSeq = new svaSeq(Seq(TimeOp(lowerBounds, lowerBounds)))
     def |(t:svaSeq): svaSeq = new svaSeq(Seq(OrSeqOp()) ++ t.s)
     def | : svaSeq = new svaSeq(Seq(OrSeqOp()))
     def *(lowerBounds: Int, upperBounds: Int): svaSeq = new svaSeq(Seq(RepetOp(lowerBounds, upperBounds)))
+    def *(lowerBounds: Int): svaSeq = new svaSeq(Seq(RepetOp(lowerBounds, lowerBounds)))
     def G: svaSeq = new svaSeq(Seq(GlobalOp()))
     def F: svaSeq = new svaSeq(Seq(FinallOp()))
     def X: svaSeq = new svaSeq(Seq(NextOp()))
@@ -86,7 +88,9 @@ class svaSeq(val s: Seq[svaElement])
 
     def |(t:svaSeq): svaSeq = new svaSeq((s :+ OrSeqOp()) ++ t.s)
     def ###(lowerBounds: Int, upperBounds: Int): svaSeq = new svaSeq((s :+ TimeOp(lowerBounds, upperBounds)))
+    def ###(lowerBounds: Int): svaSeq = new svaSeq((s :+ TimeOp(lowerBounds, lowerBounds)))
     def *(lowerBounds: Int, upperBounds: Int): svaSeq = new svaSeq((s :+ RepetOp(lowerBounds, upperBounds)))
+    def *(lowerBounds: Int): svaSeq = new svaSeq((s :+ RepetOp(lowerBounds, lowerBounds)))
     def |->(t:svaSeq) = new svaSeq((s :+ ImplicationOp()) ++ t.s)
    
     def G : svaSeq = new svaSeq(s :+ GlobalOp())
@@ -114,7 +118,7 @@ object svaSeqAnno
       // Conversion to FIRRTL Annotation 
       override def toFirrtl: Annotation = 
       {
-        println(s"currReset: ${sva.s}")
+        // println(s"currReset: ${sva.s}")
         val svaanotation : Seq[Seq[svaElementAnno]] = sva.s map {
           case AtmProp(ap) => Seq(AtmPropAnno(ap.toTarget))
           case otherOp: svaElementAnno => Seq(otherOp)
@@ -187,8 +191,8 @@ object svaSeqAnno
     {
       if(!inSeq)
       {
-        println(s"i: $i")
-        println(seq(i).toString())
+      //  println(s"i: $i")
+      //  println(seq(i).toString())
         if(seq(i).isInstanceOf[AtmPropAnno] || seq(i).isInstanceOf[TimeOp] )
         {
           inSeq = true
@@ -197,8 +201,8 @@ object svaSeqAnno
       }
       else
       {
-        println(s"i_inSeq: $i")
-        println(seq(i).toString())
+      //  println(s"i_inSeq: $i")
+      //  println(seq(i).toString())
         if(seq(i).isInstanceOf[ImplicationOp] || seq(i).isInstanceOf[s_propBinOp] || seq(i).isInstanceOf[s_propUnOp])
         {
           psl += "}"
@@ -323,9 +327,9 @@ object svaSeqAnno
           }
           val extendRB = if(nextProOp == -1) seq.size-1 else corRB + nextProOp
 
-          println(s"left subseq: ${seq.slice(0,extendLB)}")
-          println(s"middle subseq: ${seq.slice(extendLB,extendRB+1)}")
-          println(s"right subseq: ${seq.slice(extendRB+1,seq.size)}")
+        //  println(s"left subseq: ${seq.slice(0,extendLB)}")
+        //  println(s"middle subseq: ${seq.slice(extendLB,extendRB+1)}")
+        //  println(s"right subseq: ${seq.slice(extendRB+1,seq.size)}")
 
           if(nextProOp == -1)
             noParetoPSL(seq.slice(0,extendLB),rename2p) + "{" + inSeq2PSL(seq.slice(extendLB,extendRB+1),rename2p) + "}!" + toPSL(seq.slice(extendRB+1,seq.size),rename2p,false)
@@ -627,20 +631,20 @@ object svaSeqAnno
   def SVAAnno2PSL(s: svaSeqAnno) : Tuple3[String, Map[String,Target], Target] = 
   {
     val elementSVA = s.toElementSeq().toSeq
-    println(s"elementSVA: $elementSVA")
+  //  println(s"elementSVA: $elementSVA")
     val resetAn = elementSVA.filter(_.isInstanceOf[ResetAnno])
     assert(resetAn.size == 1,"only allow one reset signal")
     val remainSVA = elementSVA.filter(!_.isInstanceOf[ResetAnno])
-    println(s"remainSVA: $remainSVA")
+  //  println(s"remainSVA: $remainSVA")
     val target2p = svaSeqAnno.generateMap2p(remainSVA)
     val p2target = target2p.toSeq.map{case Tuple2(k,v) => Tuple2(v,k)}.toMap
-    println(p2target)
+  //  println(p2target)
     //val syntaxTree = svaSeqAnno.toSVATree(remainSVA)
     //println(svaSeqAnno.toSVATree(remainSVA))
     //val psl = if(!syntaxTree.isProperty) "!{" + svaSeqAnno.toPSL(syntaxTree,target2p) + "}"  else "!" + svaSeqAnno.toPSL(syntaxTree,target2p)
     val psl = "! ( G " + svaSeqAnno.toPSL(remainSVA,target2p,false) + " ) "
     //val psl = "!" + svaSeqAnno.toPSL(syntaxTree,target2p)
-    println(s"psl: $psl")
+  //  println(s"psl: $psl")
     (psl,p2target,resetAn(0).asInstanceOf[ResetAnno].target)
   }
 }
