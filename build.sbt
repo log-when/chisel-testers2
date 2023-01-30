@@ -74,6 +74,7 @@ libraryDependencies ++= Seq(
   "com.lihaoyi" %% "utest" % "0.7.11",
   "net.java.dev.jna" % "jna" % "5.11.0",
   "org.scala-lang" % "scala-reflect" % scalaVersion.value,
+  "org.scala-lang.modules" %% "scala-parser-combinators" % "2.1.1",
   compilerPlugin(("edu.berkeley.cs" % "chisel3-plugin" % defaultVersions("chisel3")).cross(CrossVersion.full))
 ) ++ {
   CrossVersion.partialVersion(scalaVersion.value) match {
