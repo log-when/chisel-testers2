@@ -7,7 +7,7 @@ import chiseltest._
 import chisel3.experimental.BundleLiterals._
 import chisel3.util.{Pipe, Valid}
 import org.scalatest._
-import treadle.VerboseAnnotation
+import treadle2.VerboseAnnotation
 import org.scalatest.flatspec.AnyFlatSpec
 
 class ValidQueueModule(typeGen: Data, val delay: Int) extends Module {
@@ -61,6 +61,19 @@ class ValidQueueTest extends AnyFlatSpec with ChiselScalatestTester {
         c.in.enqueueSeq(Seq(42.U, 43.U, 44.U))
       }.fork {
         c.out.expectDequeueSeq(Seq(42.U, 43.U, 44.U))
+      }.join()
+    }
+  }
+
+  it should "work with a zero-width data queue" in {
+    test(new ValidQueueModule(UInt(0.W), delay = 3)) { c =>
+      c.in.initSource().setSourceClock(c.clock)
+      c.out.initSink().setSinkClock(c.clock)
+
+      fork {
+        c.in.enqueueSeq(Seq(0.U, 0.U, 0.U))
+      }.fork {
+        c.out.expectDequeueSeq(Seq(0.U, 0.U, 0.U))
       }.join()
     }
   }

@@ -3,7 +3,8 @@
 import scala.language.implicitConversions
 import chiseltest.internal._
 import chisel3._
-import chisel3.experimental.{DataMirror, Direction, EnumType, FixedPoint, Interval}
+import chisel3.experimental.Direction
+import chisel3.reflect.DataMirror
 import chisel3.experimental.BundleLiterals._
 import chisel3.experimental.VecLiterals._
 import chisel3.internal.firrtl.KnownBinaryPoint
@@ -45,142 +46,63 @@ package object chiseltest {
 
   /** allows access to chisel UInt type signals with Scala native values */
   implicit class testableUInt(x: UInt) {
+    private def isZeroWidth = x.widthOption.contains(0)
     def poke(value: UInt): Unit = poke(value.litValue)
     def poke(value: BigInt): Unit = {
       Utils.ensureFits(x, value)
-      Utils.pokeBits(x, value)
+      if (!isZeroWidth) { // poking a zero width value is a no-op
+        Utils.pokeBits(x, value)
+      }
     }
     private[chiseltest] def expectInternal(value: BigInt, message: Option[() => String]): Unit = {
       Utils.ensureFits(x, value)
-      Utils.expectBits(x, value, message, None)
+      if (!isZeroWidth) { // zero width UInts always have the value 0
+        Utils.expectBits(x, value, message, None)
+      }
     }
     def expect(value: UInt): Unit = expectInternal(value.litValue, None)
     def expect(value: UInt, message: => String): Unit = expectInternal(value.litValue, Some(() => message))
     def expect(value: BigInt): Unit = expectInternal(value, None)
     def expect(value: BigInt, message: => String): Unit = expectInternal(value, Some(() => message))
-    def peek():    UInt = Context().backend.peekBits(x).asUInt(DataMirror.widthOf(x))
-    def peekInt(): BigInt = Context().backend.peekBits(x)
+    def peekInt(): BigInt = if (!isZeroWidth) { Context().backend.peekBits(x) }
+    else {
+      // zero width UInts always have the value 0
+      0
+    }
+    def peek(): UInt = if (!isZeroWidth) { peekInt().asUInt(DataMirror.widthOf(x)) }
+    else {
+      0.U // TODO: change to 0-width constant once supported: https://github.com/chipsalliance/chisel3/pull/2932
+    }
   }
 
   /** allows access to chisel SInt type signals with Scala native values */
   implicit class testableSInt(x: SInt) {
+    private def isZeroWidth = x.widthOption.contains(0)
     def poke(value: SInt): Unit = poke(value.litValue)
     def poke(value: BigInt): Unit = {
       Utils.ensureFits(x, value)
-      Utils.pokeBits(x, value)
+      if (!isZeroWidth) { // poking a zero width value is a no-op
+        Utils.pokeBits(x, value)
+      }
     }
     private[chiseltest] def expectInternal(value: BigInt, message: Option[() => String]): Unit = {
       Utils.ensureFits(x, value)
-      Utils.expectBits(x, value, message, None)
+      if (!isZeroWidth) { // zero width UInts always have the value 0
+        Utils.expectBits(x, value, message, None)
+      }
     }
     def expect(value: SInt): Unit = expectInternal(value.litValue, None)
     def expect(value: SInt, message: => String): Unit = expectInternal(value.litValue, Some(() => message))
     def expect(value: BigInt): Unit = expectInternal(value, None)
     def expect(value: BigInt, message: => String): Unit = expectInternal(value, Some(() => message))
-    def peek():    SInt = Context().backend.peekBits(x).asSInt(DataMirror.widthOf(x))
-    def peekInt(): BigInt = Context().backend.peekBits(x)
-  }
-
-  /** allows access to chisel Interval type signals with Scala native values */
-  implicit class testableInterval(x: Interval) {
-    private def asInterval(value: Double):     Interval = value.I(Utils.getFirrtlWidth(x), x.binaryPoint)
-    private def asInterval(value: BigDecimal): Interval = value.I(Utils.getFirrtlWidth(x), x.binaryPoint)
-    def poke(value: Interval): Unit = {
-      require(x.binaryPoint == value.binaryPoint, "binary point mismatch")
-      Utils.pokeBits(x, value.litValue)
+    def peekInt(): BigInt = if (!isZeroWidth) { Context().backend.peekBits(x) }
+    else {
+      // zero width UInts always have the value 0
+      0
     }
-    def poke(value: Double):     Unit = poke(asInterval(value))
-    def poke(value: BigDecimal): Unit = poke(asInterval(value))
-    private[chiseltest] def expectInternal(value: Interval, message: Option[() => String]): Unit = {
-      require(x.binaryPoint == value.binaryPoint, "binary point mismatch")
-      // for backwards compatibility reasons, we do not support epsilon when expect is called with the Interval type.
-      Utils.expectBits(x, value.litValue, message, Some(Utils.fixedToString(x.binaryPoint)))
-    }
-    def expect(value: Interval): Unit = expectInternal(value, None)
-    def expect(value: Interval, message: => String): Unit = expectInternal(value, Some(() => message))
-    private[chiseltest] def expectInternal(expected: Double, epsilon: Double, userMsg: Option[() => String]): Unit = {
-      Utils.expectEpsilon(x, peekDouble(), expected, epsilon, userMsg)
-    }
-    def expect(value: Double): Unit = expectInternal(value, epsilon = 0.01, None)
-    def expect(value: Double, epsilon: Double): Unit = expectInternal(value, epsilon = epsilon, None)
-    def expect(value: Double, message: => String): Unit =
-      expectInternal(value, epsilon = 0.01, Some(() => message))
-    def expect(value: Double, message: => String, epsilon: Double): Unit =
-      expectInternal(value, epsilon = epsilon, Some(() => message))
-    private[chiseltest] def expectInternal(
-      expected: BigDecimal,
-      epsilon:  BigDecimal,
-      userMsg:  Option[() => String]
-    ): Unit = {
-      Utils.expectEpsilon(x, peekBigDecimal(), expected, epsilon, userMsg)
-    }
-    def expect(value: BigDecimal): Unit = expectInternal(value, epsilon = 0.01, None)
-    def expect(value: BigDecimal, epsilon: BigDecimal): Unit = expectInternal(value, epsilon = epsilon, None)
-    def expect(value: BigDecimal, message: => String): Unit =
-      expectInternal(value, epsilon = 0.01, Some(() => message))
-    def expect(value: BigDecimal, message: => String, epsilon: BigDecimal): Unit =
-      expectInternal(value, epsilon = epsilon, Some(() => message))
-    def peek(): Interval = Context().backend.peekBits(x).I(x.binaryPoint)
-    def peekDouble(): Double = x.binaryPoint match {
-      case KnownBinaryPoint(bp) => Interval.toDouble(Context().backend.peekBits(x), bp)
-      case _                    => throw new Exception("Cannot peekInterval with unknown binary point location")
-    }
-    def peekBigDecimal(): BigDecimal = x.binaryPoint match {
-      case KnownBinaryPoint(bp) => Interval.toBigDecimal(Context().backend.peekBits(x), bp)
-      case _                    => throw new Exception("Cannot peekInterval with unknown binary point location")
-    }
-  }
-
-  /** allows access to chisel FixedPoint type signals with Scala native values */
-  implicit class testableFixedPoint(x: FixedPoint) {
-    private def asFixedPoint(value: Double):     FixedPoint = value.F(Utils.getFirrtlWidth(x), x.binaryPoint)
-    private def asFixedPoint(value: BigDecimal): FixedPoint = value.F(Utils.getFirrtlWidth(x), x.binaryPoint)
-    def poke(value: FixedPoint): Unit = {
-      require(x.binaryPoint == value.binaryPoint, "binary point mismatch")
-      Utils.pokeBits(x, value.litValue)
-    }
-    def poke(value: Double):     Unit = poke(asFixedPoint(value))
-    def poke(value: BigDecimal): Unit = poke(asFixedPoint(value))
-    private[chiseltest] def expectInternal(value: FixedPoint, message: Option[() => String]): Unit = {
-      require(x.binaryPoint == value.binaryPoint, "binary point mismatch")
-      // for backwards compatibility reasons, we do not support epsilon when expect is called with the FixedPoint type.
-      Utils.expectBits(x, value.litValue, message, Some(Utils.fixedToString(x.binaryPoint)))
-    }
-    def expect(value: FixedPoint): Unit = expectInternal(value, None)
-    def expect(value: FixedPoint, message: => String): Unit = expectInternal(value, Some(() => message))
-    private[chiseltest] def expectInternal(expected: Double, epsilon: Double, userMsg: Option[() => String]): Unit = {
-      Utils.expectEpsilon(x, peekDouble(), expected, epsilon, userMsg)
-    }
-    def expect(value: Double): Unit = expectInternal(value, epsilon = 0.01, None)
-    def expect(value: Double, epsilon: Double): Unit = expectInternal(value, epsilon = epsilon, None)
-    def expect(value: Double, message: => String): Unit =
-      expectInternal(value, epsilon = 0.01, Some(() => message))
-    def expect(value: Double, message: => String, epsilon: Double): Unit =
-      expectInternal(value, epsilon = epsilon, Some(() => message))
-    private[chiseltest] def expectInternal(
-      expected: BigDecimal,
-      epsilon:  BigDecimal,
-      userMsg:  Option[() => String]
-    ): Unit = {
-      Utils.expectEpsilon(x, peekBigDecimal(), expected, epsilon, userMsg)
-    }
-    def expect(value: BigDecimal): Unit = expectInternal(value, epsilon = 0.01, None)
-    def expect(value: BigDecimal, epsilon: BigDecimal): Unit = expectInternal(value, epsilon = epsilon, None)
-    def expect(value: BigDecimal, message: => String): Unit =
-      expectInternal(value, epsilon = 0.01, Some(() => message))
-    def expect(value: BigDecimal, message: => String, epsilon: BigDecimal): Unit =
-      expectInternal(value, epsilon = epsilon, Some(() => message))
-    def peek(): FixedPoint = {
-      val multiplier = BigDecimal(2).pow(x.binaryPoint.get)
-      (BigDecimal(Context().backend.peekBits(x)) / multiplier).F(x.binaryPoint)
-    }
-    def peekDouble(): Double = x.binaryPoint match {
-      case KnownBinaryPoint(bp) => FixedPoint.toDouble(Context().backend.peekBits(x), bp)
-      case _                    => throw new Exception("Cannot peekInterval with unknown binary point location")
-    }
-    def peekBigDecimal(): BigDecimal = x.binaryPoint match {
-      case KnownBinaryPoint(bp) => FixedPoint.toBigDecimal(Context().backend.peekBits(x), bp)
-      case _                    => throw new Exception("Cannot peekInterval with unknown binary point location")
+    def peek(): SInt = if (!isZeroWidth) { peekInt().asSInt(DataMirror.widthOf(x)) }
+    else {
+      0.S // TODO: change to 0-width constant once supported: https://github.com/chipsalliance/chisel3/pull/2932
     }
   }
 
@@ -196,19 +118,7 @@ package object chiseltest {
       */
     def pokePartial(value: T): Unit = {
       require(DataMirror.checkTypeEquivalence(x, value), s"Record type mismatch")
-      x.elements.filter { case (k, v) =>
-        DataMirror.directionOf(v) != ActualDirection.Output && {
-          value.elements(k) match {
-            case _:    Record => true
-            case data: Data   => data.isLit
-          }
-        }
-      }.foreach { case (k, v) =>
-        v match {
-          case record: Record => record.pokePartial(value.elements(k).asInstanceOf[Record])
-          case data:   Data   => data.poke(value.elements(k))
-        }
-      }
+      x.pokeInternal(value, allowPartial = true)
     }
 
     /** Check the given signal with a [[Record.litValue()]];
@@ -216,17 +126,7 @@ package object chiseltest {
       */
     def expectPartial(value: T): Unit = {
       require(DataMirror.checkTypeEquivalence(x, value), s"Record type mismatch")
-      x.elements.filter { case (k, _) =>
-        value.elements(k) match {
-          case _: Record => true
-          case d: Data   => d.isLit
-        }
-      }.foreach { case (k, v) =>
-        v match {
-          case record: Record => record.expectPartial(value.elements(k).asInstanceOf[Record])
-          case data:   Data   => data.expect(value.elements(k))
-        }
-      }
+      x.expectInternal(value, None, allowPartial = true)
     }
   }
 
@@ -242,19 +142,7 @@ package object chiseltest {
       */
     def pokePartial(value: T): Unit = {
       require(DataMirror.checkTypeEquivalence(x, value), s"Vec type mismatch")
-      x.getElements.zipWithIndex.filter { case (v, index) =>
-        DataMirror.directionOf(v) != ActualDirection.Output && {
-          value.getElements(index) match {
-            case _:    T    => true
-            case data: Data => data.isLit
-          }
-        }
-      }.foreach { case (v, index) =>
-        v match {
-          case vec:  T    => vec.pokePartial(value.getElements(index).asInstanceOf[T])
-          case data: Data => data.poke(value.getElements(index))
-        }
-      }
+      x.pokeInternal(value, allowPartial = true)
     }
 
     /** Check the given signal with a [[Vec.litValue()]];
@@ -262,52 +150,64 @@ package object chiseltest {
       */
     def expectPartial(value: T): Unit = {
       require(DataMirror.checkTypeEquivalence(x, value), s"Vec type mismatch")
-      x.getElements.zipWithIndex.filter { case (_, index) =>
-        value.getElements(index) match {
-          case _: T    => true
-          case d: Data => d.isLit
-        }
-      }.foreach { case (v, index) =>
-        v match {
-          case vec:  T    => vec.expectPartial(value.getElements(index).asInstanceOf[T])
-          case data: Data => data.expect(value.getElements(index))
-        }
-      }
+      x.expectInternal(value, None, allowPartial = true)
     }
   }
 
   implicit class testableData[T <: Data](x: T) {
     import Utils._
 
-    def poke(value: T): Unit = (x, value) match {
-      case (x: Bool, value: Bool) => x.poke(value)
-      case (x: UInt, value: UInt) => x.poke(value)
-      case (x: SInt, value: SInt) => x.poke(value)
-      case (x: FixedPoint, value: FixedPoint) => x.poke(value)
-      case (x: Interval, value: Interval) => x.poke(value)
-      case (x: Record, value: Record) =>
-        require(DataMirror.checkTypeEquivalence(x, value), s"Record type mismatch")
-        x.elements.zip(value.elements).foreach { case ((_, x), (_, value)) =>
-          x.poke(value)
+    def poke(value: T): Unit = pokeInternal(value, allowPartial = false)
+
+    private def isAllowedNonLitGround(value: T, allowPartial: Boolean, op: String): Boolean = {
+      val isGroundType = value match {
+        case _: Vec[_] | _: Record => false
+        case _ => true
+      }
+      val isZeroWidthInt = value match {
+        case v: Bits if v.widthOption.contains(0) => true
+        case _ => false
+      }
+      // if we are dealing with a ground type non-literal, this is only allowed if we are doing a partial poke/expect
+      if (isGroundType && !value.isLit) {
+        // zero-width integers do not carry a value and thus are allowed to be DontCare
+        if (allowPartial || isZeroWidthInt) { true }
+        else {
+          throw new NonLiteralValueError(value, x, op)
         }
-      case (x: Vec[_], value: Vec[_]) =>
-        require(DataMirror.checkTypeEquivalence(x, value), s"Vec type mismatch")
-        x.getElements.zip(value.getElements).foreach { case (x, value) =>
-          x.poke(value)
-        }
-      case (x: EnumType, value: EnumType) =>
-        require(DataMirror.checkTypeEquivalence(x, value), s"EnumType mismatch")
-        pokeBits(x, value.litValue)
-      case x => throw new LiteralTypeException(s"don't know how to poke $x")
-      // TODO: aggregate types
+      } else {
+        false
+      }
+    }
+
+    private[chiseltest] def pokeInternal(value: T, allowPartial: Boolean): Unit = {
+      if (isAllowedNonLitGround(value, allowPartial, "poke")) return
+      (x, value) match {
+        case (x: Bool, value: Bool) => x.poke(value)
+        case (x: UInt, value: UInt) => x.poke(value)
+        case (x: SInt, value: SInt) => x.poke(value)
+        case (x: Record, value: Record) =>
+          require(DataMirror.checkTypeEquivalence(x, value), s"Record type mismatch")
+          x.elements.zip(value.elements).foreach { case ((_, x), (_, value)) =>
+            x.pokeInternal(value, allowPartial)
+          }
+        case (x: Vec[_], value: Vec[_]) =>
+          require(DataMirror.checkTypeEquivalence(x, value), s"Vec type mismatch")
+          x.getElements.zip(value.getElements).foreach { case (x, value) =>
+            x.pokeInternal(value, allowPartial)
+          }
+        case (x: EnumType, value: EnumType) =>
+          require(DataMirror.checkTypeEquivalence(x, value), s"EnumType mismatch")
+          pokeBits(x, value.litValue)
+        case x => throw new LiteralTypeException(s"don't know how to poke $x")
+        // TODO: aggregate types
+      }
     }
 
     def peek(): T = x match {
-      case x: Bool       => x.peek().asInstanceOf[T]
-      case x: UInt       => x.peek().asInstanceOf[T]
-      case x: SInt       => x.peek().asInstanceOf[T]
-      case x: FixedPoint => x.peek().asInstanceOf[T]
-      case x: Interval => x.peek().asInstanceOf[T]
+      case x: Bool => x.peek().asInstanceOf[T]
+      case x: UInt => x.peek().asInstanceOf[T]
+      case x: SInt => x.peek().asInstanceOf[T]
       case x: Record =>
         val elementValueFns = x.elements.map { case (name: String, elt: Data) =>
           (y: Record) => (y.elements(name), elt.peek())
@@ -317,35 +217,44 @@ package object chiseltest {
         val elementValueFns = x.getElements.map(_.peek())
         Vec.Lit(elementValueFns: _*).asInstanceOf[T]
       case x: EnumType =>
-        throw new NotImplementedError(s"peeking enums ($x) not yet supported, need programmatic enum construction")
+        val bits = Context().backend.peekBits(x)
+        chisel3.internaltest.EnumHelpers.fromBits(x, bits).asInstanceOf[T]
       case x => throw new LiteralTypeException(s"don't know how to peek $x")
     }
 
-    protected def expectInternal(value: T, message: Option[() => String]): Unit = (x, value) match {
-      case (x: Bool, value: Bool) => x.expectInternal(value.litValue, message)
-      case (x: UInt, value: UInt) => x.expectInternal(value.litValue, message)
-      case (x: SInt, value: SInt) => x.expectInternal(value.litValue, message)
-      case (x: FixedPoint, value: FixedPoint) => x.expectInternal(value, message)
-      case (x: Interval, value: Interval) => x.expectInternal(value, message)
-      case (x: Record, value: Record) =>
-        require(DataMirror.checkTypeEquivalence(x, value), s"Record type mismatch")
-        x.elements.zip(value.elements).foreach { case ((_, x), (_, value)) =>
-          x.expectInternal(value, message)
-        }
-      case (x: Vec[_], value: Vec[_]) =>
-        require(DataMirror.checkTypeEquivalence(x, value), s"Vec type mismatch")
-        x.getElements.zip(value.getElements).foreach { case (x, value) =>
-          x.expectInternal(value, message)
-        }
-      case (x: EnumType, value: EnumType) =>
-        require(DataMirror.checkTypeEquivalence(x, value), s"EnumType mismatch")
-        Utils.expectBits(x, value.litValue, message, Some(enumToString(x)))
-      case x => throw new LiteralTypeException(s"don't know how to expect $x")
-      // TODO: aggregate types
+    private[chiseltest] def expectInternal(value: T, message: Option[() => String], allowPartial: Boolean): Unit = {
+      if (isAllowedNonLitGround(value, allowPartial, "expect")) return
+      (x, value) match {
+        case (x: Bool, value: Bool) => x.expectInternal(value.litValue, message)
+        case (x: UInt, value: UInt) => x.expectInternal(value.litValue, message)
+        case (x: SInt, value: SInt) => x.expectInternal(value.litValue, message)
+        case (x: Record, value: Record) =>
+          require(DataMirror.checkTypeEquivalence(x, value), s"Record type mismatch")
+          x.elements.zip(value.elements).foreach { case ((_, x), (_, value)) =>
+            x.expectInternal(value, message, allowPartial)
+          }
+        case (x: Vec[_], value: Vec[_]) =>
+          require(DataMirror.checkTypeEquivalence(x, value), s"Vec type mismatch")
+          x.getElements.zip(value.getElements).zipWithIndex.foreach { case ((subX, value), index) =>
+            value match {
+              case DontCare =>
+                throw new RuntimeException(
+                  s"Vec $x needs to be fully specified when using expect. Index $index is missing." +
+                    "Maybe try using `expectPartial` if you only want to check for some elements."
+                )
+              case other => subX.expectInternal(other, message, allowPartial)
+            }
+          }
+        case (x: EnumType, value: EnumType) =>
+          require(DataMirror.checkTypeEquivalence(x, value), s"EnumType mismatch")
+          Utils.expectBits(x, value.litValue, message, Some(enumToString(x)))
+        case x => throw new LiteralTypeException(s"don't know how to expect $x")
+        // TODO: aggregate types
+      }
     }
 
-    def expect(value: T): Unit = expectInternal(value, None)
-    def expect(value: T, message: => String): Unit = expectInternal(value, Some(() => message))
+    def expect(value: T): Unit = expectInternal(value, None, allowPartial = false)
+    def expect(value: T, message: => String): Unit = expectInternal(value, Some(() => message), allowPartial = false)
 
     /** @return the single clock that drives the source of this signal.
       * @throws ClockResolutionException if sources of this signal have more than one, or zero clocks
@@ -388,6 +297,8 @@ package object chiseltest {
     // Throw an exception if the value cannot fit into the signal.
     def ensureFits(signal: SInt, value: BigInt): Unit = {
       signal.widthOption match {
+        case Some(0) => // special case: 0-width SInts always represent 0
+          ensureInRange(signal, value, 0, 0)
         case Some(w) =>
           val m = BigInt(1) << (w - 1)
           ensureInRange(signal, value, -m, m - 1)
@@ -409,21 +320,14 @@ package object chiseltest {
 
     def boolBitsToString(bits: BigInt): String = (bits != 0).toString
 
-    def fixedToString(binaryPoint: BinaryPoint): BigInt => String = {
+    def enumToString(tpe: EnumType): BigInt => String = {
       def inner(bits: BigInt): String = {
-        binaryPoint match {
-          case KnownBinaryPoint(binaryPoint) =>
-            val bpInteger = 1 << binaryPoint
-            (bits.toFloat / bpInteger).toString
-          case UnknownBinaryPoint => "[unknown binary point]"
-        }
+        val fullName = chisel3.internaltest.EnumHelpers.valueToName(tpe, bits).getOrElse("???")
+        // we only want to class and value name, not the package or enclosing class
+        val noPackage = fullName.split('.').takeRight(2).mkString(".")
+        val noEnclosingClass = noPackage.split('$').last
+        noEnclosingClass
       }
-
-      inner
-    }
-
-    def enumToString(record: EnumType): BigInt => String = {
-      def inner(bits: BigInt): String = "[unimplemented enum decode]"
 
       inner
     }

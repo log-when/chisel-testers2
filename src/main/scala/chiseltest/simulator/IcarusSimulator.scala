@@ -7,12 +7,13 @@ import firrtl.options.Dependency
 import firrtl.stage.RunFirrtlTransformAnnotation
 import firrtl.transforms.formal.RemoveVerificationStatements
 import firrtl.{AnnotationSeq, CircuitState}
+import logger.LazyLogging
 
 case object IcarusBackendAnnotation extends SimulatorAnnotation {
   override def getSimulator: Simulator = IcarusSimulator
 }
 
-private object IcarusSimulator extends Simulator {
+private object IcarusSimulator extends Simulator with LazyLogging {
   override def name: String = "iverilog"
 
   /** is this simulator installed on the local machine? */
@@ -34,7 +35,7 @@ private object IcarusSimulator extends Simulator {
 
   // example version string: Icarus Verilog version 11.0 (stable) ()
   private lazy val version: (Int, Int) = { // (major, minor)
-    val split = os.proc("iverilog", "-v").call(check = false, stderr = os.Pipe).out.trim.split(' ')
+    val split = os.proc("iverilog", "-v").call(check = false, stderr = os.Pipe).out.trim().split(' ')
     assert(
       split.length > 1 && split.take(3).sameElements(Seq("Icarus", "Verilog", "version")),
       s"Unknown icarus verilog version string: ${split.mkString(" ")}"
@@ -45,6 +46,10 @@ private object IcarusSimulator extends Simulator {
   private def majorVersion: Int = version._1
   private def minorVersion: Int = version._2
 
+  private def getSimulatorArgs(state: CircuitState): Array[String] = {
+    state.annotations.view.collect { case PlusArgsAnnotation(args) => args }.flatten.toArray
+  }
+
   /** start a new simulation
     *
     * @param state LoFirrtl circuit + annotations
@@ -54,9 +59,12 @@ private object IcarusSimulator extends Simulator {
     val targetDir = Compiler.requireTargetDir(state.annotations)
     val toplevel = TopmoduleInfo(state.circuit)
 
+    // show verbose messages
+    val verbose = state.annotations.contains(SimulatorDebugAnnotation)
+
     // Create the VPI files that icarus needs + a custom harness
     val moduleNames = GetModuleNames(state.circuit)
-    val compileDir = makeCompileDir(targetDir)
+    val compileDir = makeCompileDir(targetDir, verbose)
     val verilogHarness = generateHarness(compileDir, toplevel, moduleNames)
 
     // Compile VPI code
@@ -65,8 +73,10 @@ private object IcarusSimulator extends Simulator {
     // compile low firrtl to System Verilog for verilator to use
     val passes = if (majorVersion >= 11) { Seq() }
     else {
-      println("WARN: Icarus Verilog only supports chisel's assert/assume/cover statements starting with version 11.")
-      println(
+      logger.warn(
+        "WARN: Icarus Verilog only supports chisel's assert/assume/cover statements starting with version 11."
+      )
+      logger.warn(
         s"      You are using version ${majorVersion}.${minorVersion} and we are going to remove all unsupported statements."
       )
       Seq(RunFirrtlTransformAnnotation(Dependency[RemoveVerificationStatements]))
@@ -75,16 +85,18 @@ private object IcarusSimulator extends Simulator {
 
     // turn SystemVerilog into simulation binary
     val simCmd = compileSimulation(toplevel.name, targetDir, verilogHarness) ++
-      waveformFlags(targetDir, toplevel.name, state.annotations)
+      waveformFlags(targetDir, toplevel.name, state.annotations) ++
+      getSimulatorArgs(state)
 
     // the binary we created communicates using our standard IPC interface
-    new IPCSimulatorContext(simCmd, toplevel, IcarusSimulator)
+    new IPCSimulatorContext(simCmd, toplevel, IcarusSimulator, verbose)
   }
 
-  private def makeCompileDir(targetDir: os.Path): os.Path = {
+  private def makeCompileDir(targetDir: os.Path, verbose: Boolean): os.Path = {
     val compileDir = targetDir / "icarus"
     if (os.exists(compileDir)) {
-      println(s"Deleting stale Icarus Verilog object directory: $compileDir")
+      if (verbose)
+        println(s"Deleting stale Icarus Verilog object directory: $compileDir")
       os.remove.all(compileDir)
     }
     os.makeDir(compileDir)

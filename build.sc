@@ -6,11 +6,10 @@ import mill.scalalib.scalafmt._
 import mill.scalalib.publish._
 import coursier.maven.MavenRepository
 
-object chiseltest extends mill.Cross[chiseltestCrossModule]("2.12.13")
+object chiseltest extends mill.Cross[chiseltestCrossModule]("2.13.10")
 
 val defaultVersions = Map(
   "chisel3" -> "3.6-SNAPSHOT",
-  "treadle" -> "1.6-SNAPSHOT"
 )
 
 def getVersion(dep: String, org: String = "edu.berkeley.cs") = {
@@ -40,14 +39,6 @@ class chiseltestCrossModule(val crossScalaVersion: String)
     Agg(ivy"edu.berkeley.cs:::chisel3-plugin:${defaultVersions("chisel3")}")
   } else Agg.empty[Dep]
 
-  def treadleModule: Option[PublishModule] = None
-
-  def treadleIvyDeps = if (treadleModule.isEmpty)
-    Agg(
-      getVersion("treadle")
-    )
-  else Agg.empty[Dep]
-
   override def millSourcePath = super.millSourcePath / os.up
 
   // 2.12.12 -> Array("2", "12", "12") -> "12" -> 12
@@ -67,14 +58,14 @@ class chiseltestCrossModule(val crossScalaVersion: String)
     super.javacOptions() ++ Seq("-source", "1.8", "-target", "1.8")
   }
 
-  override def moduleDeps = super.moduleDeps ++ chisel3Module ++ treadleModule
+  override def moduleDeps = super.moduleDeps ++ chisel3Module
 
   override def ivyDeps = T {
     Agg(
-      ivy"org.scalatest::scalatest:3.2.12",
-      ivy"com.lihaoyi::utest:0.7.11",
-      ivy"net.java.dev.jna:jna:5.11.0"
-    ) ++ chisel3IvyDeps ++ treadleIvyDeps
+      ivy"org.scalatest::scalatest:3.2.15",
+      ivy"com.lihaoyi::utest:0.8.1",
+      ivy"net.java.dev.jna:jna:5.13.0"
+    ) ++ chisel3IvyDeps
   }
 
   override def scalacPluginIvyDeps = T { chisel3PluginIvyDeps }
@@ -84,11 +75,11 @@ class chiseltestCrossModule(val crossScalaVersion: String)
   }
 
   object test_1 extends Tests with TestModule.ScalaTest with ScalafmtModule {
-    override def ivyDeps = T { chisel3IvyDeps ++ treadleIvyDeps }
+    override def ivyDeps = T { chisel3IvyDeps }
   }
 
   object test_2 extends Tests with TestModule.Utest with ScalafmtModule {
-    override def ivyDeps = T { chisel3IvyDeps ++ treadleIvyDeps }
+    override def ivyDeps = T { chisel3IvyDeps }
   }
 
   def pomSettings = T {

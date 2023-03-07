@@ -17,11 +17,13 @@ import scala.sys.process._
   * @param cmd command to launch the simulation binary
   * @param toplevel information about the interface exposed by the module at the top of the RTL hierarchy
   * @param sim simulator that generated the binary
+  * @param verbose show verbose messages from simulator
   */
 private[chiseltest] class IPCSimulatorContext(
   cmd:              Seq[String],
   toplevel:         TopmoduleInfo,
-  override val sim: Simulator)
+  override val sim: Simulator,
+  verbose:          Boolean)
     extends SimulatorContext
     with LazyLogging {
   toplevel.requireNoMultiClock()
@@ -57,7 +59,14 @@ private[chiseltest] class IPCSimulatorContext(
   private def startProcess(cmd: Seq[String], logs: ArrayBuffer[String], cwd: os.Path): Process = {
     val processBuilder = Process(cmd, cwd = cwd.toIO)
     // This makes everything written to stderr get added as lines to logs
-    val processLogger = ProcessLogger(println, logs += _) // don't log stdout
+    val processLogger = ProcessLogger(
+      { str => if (verbose) println(str) },
+      { str =>
+        logs.synchronized {
+          logs += str
+        }
+      }
+    )
     processBuilder.run(processLogger)
   }
 
@@ -79,9 +88,11 @@ private[chiseltest] class IPCSimulatorContext(
     }
     // Remove the startup message (and any precursors).
     while (_logs.nonEmpty && !_logs.head.startsWith(simStartupMessageStart)) {
-      println(_logs.remove(0))
+      if (verbose) println(_logs.remove(0))
     }
-    println(if (_logs.nonEmpty) _logs.remove(0) else "<no startup message>")
+    if (verbose)
+      println(if (_logs.nonEmpty) _logs.remove(0) else "<no startup message>")
+    else if (_logs.nonEmpty) _logs.remove(0)
     while (_logs.size < 3) {
       // If the test application died, throw a run-time error.
       throwExceptionIfDead(exitValue)
@@ -93,10 +104,11 @@ private[chiseltest] class IPCSimulatorContext(
     val in_channel = new Channel(cwd, in_channel_name)
     val out_channel = new Channel(cwd, out_channel_name)
     val cmd_channel = new Channel(cwd, cmd_channel_name)
-
-    println(s"inChannelName: $in_channel_name")
-    println(s"outChannelName: $out_channel_name")
-    println(s"cmdChannelName: $cmd_channel_name")
+    if (verbose) {
+      println(s"inChannelName: $in_channel_name")
+      println(s"outChannelName: $out_channel_name")
+      println(s"cmdChannelName: $cmd_channel_name")
+    }
 
     in_channel.consume()
     cmd_channel.consume()
@@ -108,8 +120,10 @@ private[chiseltest] class IPCSimulatorContext(
   }
 
   private def dumpLogs(): Unit = {
-    _logs.foreach(x => println(x))
-    _logs.clear()
+    _logs.synchronized {
+      _logs.foreach(x => println(x))
+      _logs.clear()
+    }
   }
 
   private def throwExceptionIfDead(exitValue: Future[Int]): Unit = {
@@ -256,10 +270,10 @@ private[chiseltest] class IPCSimulatorContext(
       0
     } else {
       (for {
-        _ <- Stream.from(1)
+        _ <- Iterator.from(1)
         data = recvResp
         if data.isDefined
-      } yield data.get).head
+      } yield data.get).next()
     }
   }
 
@@ -270,10 +284,10 @@ private[chiseltest] class IPCSimulatorContext(
       0
     } else {
       (for {
-        _ <- Stream.from(1)
+        _ <- Iterator.from(1)
         data = recvResp
         if data.isDefined
-      } yield data.get).head
+      } yield data.get).next()
     }
   }
 
@@ -291,15 +305,16 @@ private[chiseltest] class IPCSimulatorContext(
       BigInt(0)
     } else {
       (for {
-        _ <- Stream.from(1)
+        _ <- Iterator.from(1)
         data = recvValue(chunk)
         if data.isDefined
-      } yield data.get).head
+      } yield data.get).next()
     }
   }
 
   private def start(): Unit = {
-    println(s"""STARTING ${cmd.mkString(" ")}""")
+    if (verbose)
+      println(s"""STARTING ${cmd.mkString(" ")}""")
     mwhile(!recvOutputs) {}
     isRunning = true
   }
@@ -379,11 +394,12 @@ private[chiseltest] class IPCSimulatorContext(
   override def finish(): Unit = {
     mwhile(!sendCmd(SIM_CMD.FIN)) {}
     val exit = Await.result(exitValue, Duration.Inf)
-    println("Exit Code: %d".format(exit))
-    dumpLogs()
+    if (verbose)
+      println("Exit Code: %d".format(exit))
     inChannel.close()
     outChannel.close()
     cmdChannel.close()
+    dumpLogs()
     isRunning = false
   }
 
@@ -392,11 +408,14 @@ private[chiseltest] class IPCSimulatorContext(
 }
 
 private object TesterProcess {
-  def apply(cmd: Seq[String], logs: ArrayBuffer[String]): Process = {
+  def apply(cmd: Seq[String], logs: ArrayBuffer[String], verbose: Boolean): Process = {
     require(new java.io.File(cmd.head).exists, s"${cmd.head} doesn't exist")
     val processBuilder = Process(cmd.mkString(" "))
     // This makes everything written to stderr get added as lines to logs
-    val processLogger = ProcessLogger(println, logs += _) // don't log stdout
+    val processLogger = ProcessLogger(
+      { str => if (verbose) println(str) },
+      logs += _
+    )
     processBuilder.run(processLogger)
   }
 }
@@ -436,4 +455,5 @@ private class Channel(cwd: os.Path, name: String) {
   os.remove(cwd / name)
 }
 
-private case class TestApplicationException(exitVal: Int, lastMessage: String) extends RuntimeException(lastMessage)
+private[chiseltest] case class TestApplicationException(exitVal: Int, lastMessage: String)
+    extends RuntimeException(lastMessage)

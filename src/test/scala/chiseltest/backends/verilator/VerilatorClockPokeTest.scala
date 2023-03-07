@@ -7,8 +7,8 @@ import chiseltest._
 import chiseltest.experimental.UncheckedClockPoke._
 import chiseltest.simulator.RequiresVerilator
 import org.scalatest.flatspec.AnyFlatSpec
-import treadle.executable.ClockInfo
-import treadle.{ClockInfoAnnotation, WriteVcdAnnotation}
+import treadle2.executable.ClockInfo
+import treadle2.{ClockInfoAnnotation, WriteVcdAnnotation}
 
 class VerilatorClockPokeTest extends AnyFlatSpec with ChiselScalatestTester {
   behavior of "Testers2 with a clock input"
@@ -55,7 +55,7 @@ class VerilatorClockPokeTest extends AnyFlatSpec with ChiselScalatestTester {
       val inClock = IO(Input(Bool()))
       val out = IO(Output(UInt(8.W)))
 
-      withClock(inClock.asClock()) {
+      withClock(inClock.asClock) {
         out := Counter(true.B, 8)._1
       }
     }).withAnnotations(Seq(VerilatorBackendAnnotation)) { c =>
