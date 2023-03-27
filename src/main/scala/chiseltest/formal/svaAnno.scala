@@ -45,7 +45,9 @@ trait sva_node extends
         val lSeq = n.child.treeSerialize()
         Seq(n.eraseChildren()) ++ lSeq 
       }
-      case n => {println("Unexcepted error?"); Seq(n.eraseChildren())}
+      case n:constantTrue => Seq(constantTrue())
+      case n:constantFalse => Seq(constantFalse())
+      case n => {println(s"Unexcepted error? $n"); Seq(n.eraseChildren())}
     }
   }
 
@@ -218,7 +220,15 @@ case class ResetAnno(target:Target) extends svaElementAnno
   override def toPSL(rename2p: Map[Target,String]): String = {println("Misuse this API"); ""}
 }
 
+case class ClockAnno(target:Target) extends svaElementAnno
+{
+  override def toPSL(rename2p: Map[Target,String]): String = {println("Misuse this API"); ""}
+}
 
+case class ModuleAnno(target:Target) extends svaElementAnno
+{
+  override def toPSL(rename2p: Map[Target,String]): String = {println("Misuse this API"); ""}
+}
 
 import scala.util.parsing.combinator._
 
@@ -351,12 +361,17 @@ object svaSeq
   def svaAssert(o:Object, s:String) =
   {
     val res = o.asInstanceOf[Module].reset
+    val clo = o.asInstanceOf[Module].clock
+    val mod = o.asInstanceOf[Module]
     val svaTree = new sva_tree(o)
     println(svaTree.prop6)
     val syntaxTree = svaTree.parseAll(svaTree.prop6, s)
     println(s"$res, $syntaxTree")
     val svaSeq = syntaxTree.get.treeSerialize()
     println(svaSeq)
+    svaSeq.foreach(a => 
+      if(a.isInstanceOf[atom_prop_node])
+        dontTouch(a.asInstanceOf[atom_prop_node].signal) )
     annotate(new ChiselAnnotation {
       // Conversion to FIRRTL Annotation 
       override def toFirrtl: Annotation = 
@@ -365,7 +380,7 @@ object svaSeq
           case atom_prop_node(ap) => Seq(atom_prop_anno(ap.toTarget))
           case otherOp: svaElementAnno => Seq(otherOp)
         } 
-        new svaSeqAnno(svaanotation:+Seq(ResetAnno(res.toTarget)))
+        new svaSeqAnno(svaanotation:+Seq(ResetAnno(res.toTarget)):+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)))
       }
     })
   }
@@ -387,7 +402,7 @@ object svaSeqAnno
   def SVAAnno2PSL(s: svaSeqAnno) : Tuple3[String, Map[String,Target], Target] = 
   {
     val elementSVA = s.toElementSeq().toSeq
-  //  println(s"elementSVA: $elementSVA")
+    // println(s"elementSVA: $elementSVA")
     val resetAn = elementSVA.filter(_.isInstanceOf[ResetAnno])
     assert(resetAn.size == 1,"only allow one reset signal")
     val remainSVA = elementSVA.filter(!_.isInstanceOf[ResetAnno])

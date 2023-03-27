@@ -77,14 +77,19 @@ private[chiseltest] object Maltese {
           val firstBad:String = {witness.failed}.head
           val isExtendedSVA = firstBad.slice(0,8) == "just2Bad"
           println(s"isExtendedSVA: ${isExtendedSVA}")
+          // println(circuit)
           // violated safety property is from assertion, try to simulate
           if(!isExtendedSVA)
           {
             val sim = new TransitionSystemSimulator(sysInfo.sys)
             sim.run(witness, vcdFileName = Some((targetDir / s"${circuit.main}.bmc.vcd").toString))
             val trace = witnessToTrace(sysInfo, witness)
+            // println(circuit)
             val treadleState = prepTreadle(circuit, annos, modelUndef)
+            // println(treadleState.circuit)
+            // println(TreadleBackendAnnotation.getSimulator)
             val treadleDut = TreadleBackendAnnotation.getSimulator.createContext(treadleState)
+            // println(treadleDut)
             Trace.replayOnSim(trace, treadleDut)
           }
           // violated safety property is from extended SVA-like assertion
@@ -133,7 +138,7 @@ private[chiseltest] object Maltese {
   private val Optimizations: AnnotationSeq = Seq(
     RunFirrtlTransformAnnotation(Dependency[firrtl.transforms.ConstantPropagation]),
     RunFirrtlTransformAnnotation(Dependency(passes.CommonSubexpressionElimination)),
-    // RunFirrtlTransformAnnotation(Dependency[firrtl.transforms.DeadCodeElimination])
+    RunFirrtlTransformAnnotation(Dependency[firrtl.transforms.DeadCodeElimination])
   )
 
   private val DefRandomAnnos: AnnotationSeq = Seq(
@@ -149,6 +154,7 @@ private[chiseltest] object Maltese {
   private def toTransitionSystem(circuit: ir.Circuit, annos: AnnotationSeq): SysInfo = {
 
     val logLevel = Seq() // Seq("-ll", "info")
+    // use other way instead of removing DeadCodeElimination
     // We need to add DoNotOptimizeFormal, else targets in SVAannotation will be eliminated.
     val opts: AnnotationSeq = if (annos.contains(DoNotOptimizeFormal)) Seq() else Optimizations
     //SMTEmitter depends on FirrtlToTransitionSystem transform 
