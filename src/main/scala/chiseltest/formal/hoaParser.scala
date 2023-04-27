@@ -28,7 +28,6 @@ class hoaParser extends HOAConsumer{
     var int2Ap: mutable.Map[Int,String] = mutable.Map[Int,String]()
     var int2Aux: mutable.Map[Int,String] = mutable.Map[Int,String]()
     
-
     var apNum: Int = 0
     var auxVarNum: Int = 0
     
@@ -158,6 +157,23 @@ class hoaParser extends HOAConsumer{
         }
     }
 
+    //check all accStates are badState
+    def badAccs(): Boolean = {
+        val accISBad = accStates.map{
+            i:Int =>
+            {
+                // println(transitionFunc(i).size == 1)
+                // println(transitionFunc(i).last._1.isOne())
+                // println(transitionFunc(i).last._2)
+                // println(i)
+                transitionFunc(i).size == 1 & transitionFunc(i).last._1.isOne() &
+                transitionFunc(i).last._2.size == 1 & transitionFunc(i).last._2.head == i
+            }
+        }
+        println(s"accStates: $accStates")
+        println(accISBad.toSeq)
+        accISBad.foldLeft(true)((a,b)=> a & b)
+    }
 
     @throws(classOf[HOAConsumerException])
     override def setNumberOfStates(numberOfStates: Int): Unit =
@@ -220,8 +236,6 @@ class hoaParser extends HOAConsumer{
 
     @throws(classOf[HOAConsumerException])
     override def addProperties(x$1: java.util.List[String]): Unit = {}
-
-    
 
     @throws(classOf[HOAConsumerException])
     override def addState(id: Int, info: String, labelExpression: jhoafparser.ast.BooleanExpression[jhoafparser.ast.AtomLabel], accSignature: java.util.List[Integer]): Unit = 

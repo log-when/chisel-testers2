@@ -7,6 +7,7 @@ package object formal {
   val CVC4EngineAnnotation = backends.CVC4EngineAnnotation
   val Z3EngineAnnotation = backends.Z3EngineAnnotation
   val BtormcEngineAnnotation = backends.BtormcEngineAnnotation
+  val PonoEngineAnnotation = backends.PonoEngineAnnotation
   val BitwuzlaEngineAnnotation = backends.BitwuzlaEngineAnnotation
   val MagicPacketTracker = vips.MagicPacketTracker
 }

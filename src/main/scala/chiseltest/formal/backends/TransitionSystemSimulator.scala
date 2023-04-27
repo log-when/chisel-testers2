@@ -12,7 +12,7 @@ private[chiseltest] class TransitionSystemSimulator(
   sys:               TransitionSystem,
   inputNameMap:      Map[String,String] = Map[String,String](),
   stateNameMap:      Map[String,String] = Map[String,String](),
-  val isExtendedSVA: Boolean = false,
+  val hasJustice: Boolean = false,
   val maxMemVcdSize: Int = 128,
   printUpdates:      Boolean = false) {
 
@@ -116,7 +116,7 @@ private[chiseltest] class TransitionSystemSimulator(
       else {
         val vv = vcd.VCD(sys.name)
         vv.addWire("Step", 64)
-        if(isExtendedSVA)
+        if(hasJustice)
         {
           allBV.foreach(s => 
           {
@@ -176,7 +176,7 @@ private[chiseltest] class TransitionSystemSimulator(
     vcdWriter.foreach(_.wireChanged("Step", index))
 
     if (printUpdates) println(s"\nSTEP $index")
-    if(isExtendedSVA)
+    if(hasJustice)
     {
       if(data(bvNameToIndex("seen_"+bad+"_")).equals(1))
         loop = true
@@ -184,7 +184,7 @@ private[chiseltest] class TransitionSystemSimulator(
     
     // dump state
     vcdWriter.foreach { v =>
-      if(isExtendedSVA)
+      if(hasJustice)
       {
         if(loop)
           v.wireChanged("loop",BigInt(1))
@@ -209,7 +209,7 @@ private[chiseltest] class TransitionSystemSimulator(
     sys.inputs.zipWithIndex.foreach { case (input, ii) =>
       val value = inputs(ii)
       data(ii) = value
-      if(isExtendedSVA)
+      if(hasJustice)
       {
         vcdWriter.foreach(_.wireChanged(inputNameMap(input.name), value))
       }
@@ -226,7 +226,7 @@ private[chiseltest] class TransitionSystemSimulator(
         val value = eval(e)
         if (printUpdates) println(s"S: $name -> $value")
         data(bvNameToIndex(name)) = value
-        if(!isExtendedSVA)
+        if(!hasJustice)
          vcdWriter.foreach(_.wireChanged(name, value))
       case Signal(name, e: ArrayExpr, _) =>
         val value = evalArray(e)
@@ -308,7 +308,8 @@ private[chiseltest] class TransitionSystemSimulator(
     init(witness.regInit, witness.memInit, withVcd = vcdFileName.nonEmpty)
     
     val badString = witness.failed(0)
-    val bad = if(isExtendedSVA) badString.slice(8,badString.size - 1).toInt else -1
+    println(s"badString: $badString")
+    val bad = if(hasJustice) badString.slice(8,badString.size - 1).toInt else -1
     println(s"bad: $bad")
     
     witness.inputs.zipWithIndex.foreach { case (inputs, index) =>

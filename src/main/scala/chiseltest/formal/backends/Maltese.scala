@@ -3,7 +3,7 @@
 package chiseltest.formal.backends
 
 import chiseltest.formal._
-import chiseltest.formal.backends.btor.BtormcModelChecker
+import chiseltest.formal.backends.btor.{BtormcModelChecker, PonoModelChecker}
 import chiseltest.formal.backends.smt._
 import chiseltest.formal.{DoNotModelUndef, DoNotOptimizeFormal, FailedBoundedCheckException}
 import firrtl._
@@ -31,6 +31,13 @@ case object Z3EngineAnnotation extends FormalEngineAnnotation
   */
 case object BtormcEngineAnnotation extends FormalEngineAnnotation
 
+/** Uses the pono model checker, similar to btormc 
+  * @note pono performs well in HWMCC 20, 
+  * @note it is generally faster than btormc but also needs to be built from source
+  * @note pono has implemented more model checking algorithm but can only check one assertion every call 
+  */
+case object PonoEngineAnnotation extends FormalEngineAnnotation
+
 /** Use a SMTLib based model checker with the yices2 SMT solver.
   * @note yices2 often performs better than Z3 or CVC4.
   * @note yices2 is not supported yet, because we have not figured out yet how to deal with memory initialization
@@ -51,7 +58,7 @@ case object BitwuzlaEngineAnnotation extends FormalEngineAnnotation
 
 /** Formal Verification based on the firrtl compiler's SMT backend and the maltese SMT libraries solver bindings. */
 private[chiseltest] object Maltese {
-  def bmc(circuit: ir.Circuit, annos: AnnotationSeq, kMax: Int, resetLength: Int = 0): Unit = {
+  def bmc(circuit: ir.Circuit, annos: AnnotationSeq, kMax: Int, resetLength: Int = 0, algor: FormalOp = BoundedCheck()): Unit = {
     require(kMax > 0)
     require(resetLength >= 0)
 
@@ -70,46 +77,51 @@ private[chiseltest] object Maltese {
     // perform check
     val checkers = makeCheckers(annos, targetDir)
     assert(checkers.size == 1, "Parallel checking not supported atm!")
-    checkers.head.check(sysInfo.sys, kMax = kMax + resetLength) match {
+
+    // currently, only pono can call k-Induction algorithm to prove the correctness of design
+    val proveChecker = checkers.head.isInstanceOf[PonoModelChecker] 
+    val proveAlgor = algor match { 
+      case _: KInductionCheck => true
+      case _ => false
+    }
+    assert(!proveAlgor | proveChecker, s"${checkers.head.name} can't prove property!")
+
+    checkers.head.check(sysInfo.sys, kMax = kMax + resetLength, algor) match {
       case ModelCheckFail(witness) =>
         val writeVcd = annos.contains(WriteVcdAnnotation)
         if (writeVcd) {
           val firstBad:String = {witness.failed}.head
-          val isExtendedSVA = firstBad.slice(0,8) == "just2Bad"
-          println(s"isExtendedSVA: ${isExtendedSVA}")
-          // println(circuit)
+          val hasSVA = !noSva(sysInfo.sys)
+          val hasJustice = !noJustStates(sysInfo.sys)
+
+          println(s"hasSVA: ${hasSVA}")
+          println(s"hasJustice: ${hasJustice}")
           // violated safety property is from assertion, try to simulate
-          if(!isExtendedSVA)
+          if(!hasSVA)
           {
             val sim = new TransitionSystemSimulator(sysInfo.sys)
             sim.run(witness, vcdFileName = Some((targetDir / s"${circuit.main}.bmc.vcd").toString))
             val trace = witnessToTrace(sysInfo, witness)
-            // println(circuit)
             val treadleState = prepTreadle(circuit, annos, modelUndef)
-            // println(treadleState.circuit)
-            // println(TreadleBackendAnnotation.getSimulator)
             val treadleDut = TreadleBackendAnnotation.getSimulator.createContext(treadleState)
-            // println(treadleDut)
             Trace.replayOnSim(trace, treadleDut)
           }
-          // violated safety property is from extended SVA-like assertion
+          // if the violated safety property is from extended SVA-like assertion
           // don't simulate, only output the lasso-shaped trace 
           else
           {
-            println(s"stateMap: ${sysInfo.stateMap}")
             val inputNameMap = sysInfo.sys.inputs.map(_.name).map(name => name -> sysInfo.stateMap.getOrElse(name, name)).toMap
-            println(s"inputNameMap: $inputNameMap")
             val stateNameMap = sysInfo.sys.states.map(_.name).filter(sysInfo.stateMap.contains(_)).map(name => name -> {
                 sysInfo.stateMap(name)
             }).toMap  
-            println(s"stateNameMap: $stateNameMap")
-            val sim = new TransitionSystemSimulator(sysInfo.sys, inputNameMap, stateNameMap, isExtendedSVA)
+            val sim = new TransitionSystemSimulator(sysInfo.sys, inputNameMap, stateNameMap, hasJustice)
             sim.run(witness, vcdFileName = Some((targetDir / s"${circuit.main}.bmc.vcd").toString))
           }
         }
         val failSteps = witness.inputs.length - 1 - resetLength
         throw FailedBoundedCheckException(circuit.main, failSteps)
       case ModelCheckSuccess() => // good!
+      case ModelCheckProve() => // good!
     }
   }
 
@@ -181,6 +193,12 @@ private[chiseltest] object Maltese {
   private def noBadStates(sys: TransitionSystem): Boolean =
     sys.signals.count(_.lbl == IsBad) == 0
 
+  private def noSva(sys: TransitionSystem): Boolean =
+    sys.states.count(_.name.slice(0,7) == "baState") == 0
+
+  private def noJustStates(sys: TransitionSystem): Boolean =
+    sys.signals.count(_.name.slice(0,8) == "just2Bad") == 0
+
   private def firrtlPhase = new FirrtlPhase
 
   private def makeCheckers(annos: AnnotationSeq, targetDir: os.Path): Seq[IsModelChecker] = {
@@ -190,6 +208,7 @@ private[chiseltest] object Maltese {
       case CVC4EngineAnnotation      => new SMTModelChecker(CVC4SMTLib)
       case Z3EngineAnnotation        => new SMTModelChecker(Z3SMTLib)
       case BtormcEngineAnnotation    => new BtormcModelChecker(targetDir)
+      case PonoEngineAnnotation => new PonoModelChecker(targetDir)
       case Yices2EngineAnnotation    => new SMTModelChecker(Yices2SMTLib)
       case BoolectorEngineAnnotation => new SMTModelChecker(BoolectorSMTLib)
       case BitwuzlaEngineAnnotation  => new SMTModelChecker(BitwuzlaSMTLib)
@@ -218,14 +237,8 @@ private[chiseltest] object Maltese {
       .toIndexedSeq
     val stateNames = sysInfo.sys.states
       .map(_.name)
-      // .filter{
-      //   case s:String => s.last != '_'
-      // }
-      // translate flattened state name to hierarchical path
       .map(name => sysInfo.stateMap.getOrElse(name, name))
       .toIndexedSeq
-      println(s"inputNames: $inputNames")
-      println(s"stateNames: $stateNames")
 
     Trace(
       inputs = w.inputs.map(_.toSeq.map { case (i, value) => inputNames(i) -> value }),

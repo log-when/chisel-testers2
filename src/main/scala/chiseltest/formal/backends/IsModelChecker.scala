@@ -3,12 +3,15 @@
 package chiseltest.formal.backends
 
 import firrtl.backends.experimental.smt._
+import chiseltest.formal.{FormalOp, BoundedCheck}
 
 private[chiseltest] trait ModelCheckResult {
   def isFail: Boolean
   def isSuccess: Boolean = !isFail
 }
 private[chiseltest] case class ModelCheckSuccess() extends ModelCheckResult { override def isFail: Boolean = false }
+private[chiseltest] case class ModelCheckProve() extends ModelCheckResult {override def isFail: Boolean = false }
+
 private[chiseltest] case class ModelCheckFail(witness: Witness) extends ModelCheckResult {
   override def isFail: Boolean = true
 }
@@ -18,6 +21,8 @@ private[chiseltest] trait IsModelChecker {
   val prefix:        String
   val fileExtension: String
   def check(sys: TransitionSystem, kMax: Int = -1): ModelCheckResult
+  // Scala disallows overloaded methods with default arguments
+  def check(sys: TransitionSystem, kMax: Int, algor:FormalOp): ModelCheckResult = check(sys, kMax)
 }
 
 private[chiseltest] case class Witness(

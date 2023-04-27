@@ -1,18 +1,35 @@
+// important: solve problems casued by extra clock information and module information...
+// important: reconsider the semantics of reset: G (!reset -> p)
 package chiseltest.formal
 
 import scala.collection.mutable
 import chisel3._
 import chisel3.experimental.{ChiselAnnotation,annotate,RunFirrtlTransform}
-import firrtl.annotations.{Annotation, ReferenceTarget, SingleTargetAnnotation, Target,MultiTargetAnnotation}
+import firrtl.annotations.{Annotation, ReferenceTarget, SingleTargetAnnotation, Target,MultiTargetAnnotation,NoTargetAnnotation}
 import firrtl.options.StageUtils
 import firrtl.RenameMap
 import org.json4s.JValue
 import firrtl._
+import firrtl.ir.Expression
 
 import scala.collection.Traversable
 import scala.reflect.runtime.{universe => ru}
 import javax.swing.text.html.HTMLEditorKit.Parser
+import scala.util.parsing.combinator._
 
+// class(trait) hierarch:
+// sva_op(only for parser) - seq_op -repe_op, time_delay_op
+
+// sva_node: for parser and annotation sequence
+//  -sva_seq: describe seq in parser
+//  -sva_prop: describe prop in parser 
+//  -svaElementAnno: describe the prop in annotation sequence
+//    -un_op_node: uniary operator
+//      +sva_seq: un_op_seq
+//      +sva_pro: un_op_prop
+//    -bin_op_node: binary operator
+//      +sva_seq: bin_op_seq
+//      +sva_pro: bin_op_prop
 
 //Only for parser, suffixed with "op" 
 trait sva_op
@@ -20,10 +37,8 @@ trait seq_op extends sva_op
 case class repe_op(lowerBound:Int, upperBound:Int) extends seq_op
 case class time_delay_op(lowerBound:Int, upperBound:Int) extends seq_op
 
-
-
 //For parser and annotation sequence
-trait sva_node extends
+trait sva_node
 {
   // For serialization: omit the information of its children
   def eraseChildren(): sva_node = this
@@ -51,7 +66,7 @@ trait sva_node extends
     }
   }
 
-  def treeDeSerialize(s:Seq[svaElementAnno]): Tuple2[sva_node, Int] =
+  def treeDeSerialize(s:Seq[sva_node]): Tuple2[sva_node, Int] =
   {
     this match 
     {
@@ -78,28 +93,33 @@ trait sva_node extends
 trait svaElementAnno extends sva_node
 {
   def toPSL(rename2p: Map[Target,String]): String
+  def toSVA(f: Target => Expression): Seq[Any]
 }
-trait un_op_node[T<: sva_node] extends sva_node with svaElementAnno
+trait un_op_node[T<: sva_node] extends svaElementAnno
 {
   var child: T
-  def opStringL: String
-  def opStringR: String
+  def opPSLL: String
+  def opPSLR: String
+  def opSVAL: String
+  def opSVAR: String
   override def eraseChildren(): sva_node = { child = null.asInstanceOf[T]; this }
   override def setChildren(s: Seq[sva_node])= 
   {
     assert(s.size == 1)
     this.child = s(0).asInstanceOf[T]
   }
-  override def toPSL(rename2p: Map[Target,String]): String = "(" + opStringL + child.asInstanceOf[svaElementAnno].toPSL(rename2p) + opStringR +")" +
-    "" +
+  override def toPSL(rename2p: Map[Target,String]): String = "(" + opPSLL + child.asInstanceOf[svaElementAnno].toPSL(rename2p) + opPSLR +")" +
     ""
+  override def toSVA(f: Target => Expression): Seq[Any] = Seq("(", opSVAL, child.asInstanceOf[svaElementAnno].toSVA(f) , opSVAR ,")")
 }
 
-trait bin_op_node[T1<: sva_node, T2<: sva_node] extends sva_node with svaElementAnno
+trait bin_op_node[T1<: sva_node, T2<: sva_node] extends svaElementAnno
 {
   var lchild: T1
   var rchild: T2
-  def opString: String
+  def opPSL: String
+  def opSVA: String
+
   override def eraseChildren(): sva_node = { lchild = null.asInstanceOf[T1]; rchild = null.asInstanceOf[T2]; this }
   override def setChildren(s: Seq[sva_node])= 
   {
@@ -113,11 +133,23 @@ trait bin_op_node[T1<: sva_node, T2<: sva_node] extends sva_node with svaElement
   {
     if(this.isInstanceOf[over_impl_prop])
     {
-      "{ "+ lchild.asInstanceOf[svaElementAnno].toPSL(rename2p) + " }" + opString + rchild.asInstanceOf[svaElementAnno].toPSL(rename2p)
+      "{ "+ lchild.asInstanceOf[svaElementAnno].toPSL(rename2p) + " }" + opPSL + rchild.asInstanceOf[svaElementAnno].toPSL(rename2p)
     }
     else
     {
-      "(" + lchild.asInstanceOf[svaElementAnno].toPSL(rename2p) + opString + rchild.asInstanceOf[svaElementAnno].toPSL(rename2p) + ")"
+      "(" + lchild.asInstanceOf[svaElementAnno].toPSL(rename2p) + opPSL + rchild.asInstanceOf[svaElementAnno].toPSL(rename2p) + ")"
+    }
+  }
+
+  override def toSVA(f: Target => Expression): Seq[Any] = 
+  {
+    if(this.isInstanceOf[over_impl_prop])
+    {
+      Seq(lchild.asInstanceOf[svaElementAnno].toSVA(f) , opSVA , rchild.asInstanceOf[svaElementAnno].toSVA(f))
+    }
+    else
+    {
+      Seq(lchild.asInstanceOf[svaElementAnno].toSVA(f) , opSVA , rchild.asInstanceOf[svaElementAnno].toSVA(f))
     }
   }
 }
@@ -129,37 +161,45 @@ trait bin_op_seq extends bin_op_node[sva_seq, sva_seq] with sva_seq
 case class constantTrue() extends sva_seq with svaElementAnno
 {
   override def toPSL(rename2p: Map[Target,String]): String = "1" 
+  override def toSVA(f: Target => Expression): Seq[Any] = Seq("1")
 }
 case class constantFalse() extends sva_seq with svaElementAnno
 {
   override def toPSL(rename2p: Map[Target,String]): String = "0" 
+  override def toSVA(f: Target => Expression): Seq[Any] = Seq("0")
 }
 case class atom_prop_node(signal:Bool) extends sva_seq
 case class atom_prop_anno(signal:Target) extends sva_seq with svaElementAnno
 {
   override def toPSL(rename2p: Map[Target,String]): String = rename2p(signal) 
+  override def toSVA(f: Target => Expression): Seq[Any] = Seq(f(signal))
 }
 case class repe_seq(lowerBound:Int, upperBound:Int, var child:sva_seq) extends un_op_seq
 {
-  override def opStringL: String = "" 
-  override def opStringR: String = 
+  override def opPSLL: String = "" 
+  override def opPSLR: String = 
   {
     val upperBounds:String = if(upperBound == -1) "$" else upperBound.toString()
     "[*" + lowerBound + ":" + upperBounds + "]"
   }
+
+  override def opSVAL: String = opPSLL
+  override def opSVAR: String = opPSLR
 }
 case class time_delay_seq(lowerBound:Int, upperBound:Int, var lchild:sva_seq, var rchild:sva_seq) extends bin_op_seq
 {
-  override def opString: String = 
+  override def opPSL: String = 
   {
     val upperBounds:String = if(upperBound == -1) "$" else upperBound.toString()
     "##[" + lowerBound + ":" + upperBounds + "]"
   }
+  override def opSVA: String = opPSL
 }
 // case class and_seq(lchild:sva_seq, rchild:sva_seq) extends bin_op_seq(lchild:sva_seq, rchild:sva_seq)
 case class or_seq(var lchild:sva_seq, var rchild:sva_seq) extends bin_op_seq
 {
-  override def opString: String = " || "
+  override def opPSL: String = " || "
+  override def opSVA: String = "or"
 }
 
 
@@ -169,68 +209,91 @@ trait bin_op_pro extends bin_op_node[sva_pro, sva_pro] with sva_pro
 
 case class not_prop(var child:sva_pro) extends un_op_pro
 {
-  override def opStringL: String = "! "
-  override def opStringR: String = ""
+  override def opPSLL: String = "! "
+  override def opPSLR: String = ""
+  override def opSVAL: String = "not"
+  override def opSVAR: String = opPSLR
 }
 case class next_prop(var child:sva_pro) extends un_op_pro
 {
-  override def opStringL: String = "X"
-  override def opStringR: String = ""
+  override def opPSLL: String = "X"
+  override def opPSLR: String = ""
+  override def opSVAL: String = "nexttime"
+  override def opSVAR: String = opPSLR
 }
 case class and_prop(var lchild:sva_pro, var rchild:sva_pro) extends bin_op_pro
 {
-  override def opString: String = " && "
+  override def opPSL: String = " && "
+  override def opSVA: String = "and"
 }
 case class or_prop(var lchild:sva_pro, var rchild:sva_pro) extends bin_op_pro
 {
-  override def opString: String = " || "
+  override def opPSL: String = " || "
+  override def opSVA: String = "and"
 }
 case class until_prop(var lchild:sva_pro, var rchild:sva_pro) extends bin_op_pro
 {
-  override def opString: String = " U "
+  override def opPSL: String = " U "
+  override def opSVA: String = "until"
 }
 case class impl_prop(var lchild:sva_pro, var rchild:sva_pro) extends bin_op_pro
 {
-  override def opString: String = " -> "
+  override def opPSL: String = " -> "
+  override def opSVA: String = " implies "
 }
 case class glo_prop(var child:sva_pro) extends un_op_pro
 {
-  override def opStringL: String = "G "
-  override def opStringR: String = ""
+  override def opPSLL: String = "G "
+  override def opPSLR: String = ""
+
+  override def opSVAL: String = "always"
+  override def opSVAR: String = ""
 }
 case class fina_prop(var child:sva_pro) extends un_op_pro
 {
-  override def opStringL: String = "F "
-  override def opStringR: String = ""
-}
+  override def opPSLL: String = "F "
+  override def opPSLR: String = ""
 
+  override def opSVAL: String = "eventually"
+  override def opSVAR: String = ""
+}
 
 case class over_impl_prop(var lchild:sva_seq, var rchild:sva_pro) extends bin_op_node[sva_seq, sva_pro] with sva_pro
 {
-  override def opString: String = " []-> "
+  override def opPSL: String = " []-> "
+  override def opSVA: String = " |-> "
 }
 case class prompt_prop(var child:sva_seq) extends un_op_node[sva_seq] with sva_pro
 {
-  override def opStringL: String = "{ "
-  override def opStringR: String = " }"
+  override def opPSLL: String = ""
+  override def opPSLR: String = ""
+
+  override def opSVAL: String = ""
+  override def opSVAR: String = ""
+  override def toPSL(rename2p: Map[Target,String]): String = 
+  {
+    "(" + "{" + child.asInstanceOf[svaElementAnno].toPSL(rename2p) + "}" +")" 
+  }
 }
 // case class NoneOp() extends sva_node
-case class ResetAnno(target:Target) extends svaElementAnno
+
+
+// case class NoneOp() extends sva_node
+// case class ResetAnno(target:Target) extends sva_node
+// {
+//   override def toPSL(rename2p: Map[Target,String]): String = {println("Misuse this API"); ""}
+//   override def toSVA(f: Target => Expression): Seq[Any] = {println("Misuse this API"); ""}
+// }
+
+trait targetAnno extends sva_node
 {
-  override def toPSL(rename2p: Map[Target,String]): String = {println("Misuse this API"); ""}
+  val target: Target
 }
 
-case class ClockAnno(target:Target) extends svaElementAnno
-{
-  override def toPSL(rename2p: Map[Target,String]): String = {println("Misuse this API"); ""}
-}
-
-case class ModuleAnno(target:Target) extends svaElementAnno
-{
-  override def toPSL(rename2p: Map[Target,String]): String = {println("Misuse this API"); ""}
-}
-
-import scala.util.parsing.combinator._
+case class ResetAnno(target:Target) extends targetAnno
+case class EnableAnno(target:Target) extends targetAnno
+case class ClockAnno(target:Target) extends targetAnno
+case class ModuleAnno(target:Target) extends targetAnno
 
 class sva_tree(o:Object) extends JavaTokenParsers {
   def prop: Parser[sva_pro] = 
@@ -245,36 +308,36 @@ class sva_tree(o:Object) extends JavaTokenParsers {
   )
   def prop5: Parser[sva_pro] =
   (
-    seq~"|->"~prop                ^^ {case ~(~(p1,o),p2) =>  println(s"prop4: $p1 $p2"); over_impl_prop(p1,p2)}
+    seq~"|->"~prop6                 ^^ {case ~(~(p1,o),p2) =>  println(s"prop4: $p1 $p2"); over_impl_prop(p1,p2)}
     | prop4                         ^^ {case p:sva_pro => println(s"prop4: $p"); p}
   )
   def prop4: Parser[sva_pro] =
   (
-      prop3~"U"~prop4               ^^ {case ~(~(p1,o),p2) =>  until_prop(p1,p2)}
-    | prop3~"->"~prop4              ^^ {case ~(~(p1,o),p2) =>  impl_prop(p1,p2)}
+      prop3~"U"~prop6               ^^ {case ~(~(p1,o),p2) =>  println(s"prop3: $p1 $p2"); until_prop(p1,p2)}
+    | prop3~"->"~prop6              ^^ {case ~(~(p1,o),p2) =>  println(s"prop3: $p1 $p2"); impl_prop(p1,p2)}
     | prop3                         ^^ {case p:sva_pro =>  p}
   )
   def prop3: Parser[sva_pro] =
   (
-    prop2~opt("||"~prop3)           ^^ {case ~(p1,Some(~(o,p2))) =>  or_prop(p1,p2)
+    prop2~opt("||"~prop6)           ^^ {case ~(p1,Some(~(o,p2))) =>  or_prop(p1,p2)
                                       case ~(p,None) => p}
   )
   def prop2: Parser[sva_pro] =
   (
-    prop1~opt("&&"~prop2)           ^^ {case ~(p1,Some(~(o,p2))) =>  and_prop(p1,p2)
+    prop1~opt("&&"~prop6)           ^^ {case ~(p1,Some(~(o,p2))) =>  and_prop(p1,p2)
                                       case ~(p,None) => p}
   )
   def prop1: Parser[sva_pro] = 
   (
       "!"~>prop1 ^^ {case p:sva_pro => println(s"prop1: $p");not_prop(p)}  
     | "X"~>prop1 ^^ {case p:sva_pro => println(s"prop1: $p");next_prop(p)}
-    | "("~>prop<~")" ^^{case p:sva_pro => println(s"prop1: $p");p}
     | seq       ^^ {case s:sva_seq => println(s"prop1: $s");prompt_prop(s)}
-    |  "!"~>prop ^^ {case p:sva_pro => println(s"prop1: $p");not_prop(p)}  
-    | "X"~>prop ^^ {case p:sva_pro => println(s"prop1: $p");next_prop(p)}
+    | "("~>prop<~")" ^^{case p:sva_pro => println(s"prop1: $p");p}
+    // |  "!"~>prop ^^ {case p:sva_pro => println(s"prop1: $p");not_prop(p)}  
+    // | "X"~>prop ^^ {case p:sva_pro => println(s"prop1: $p");next_prop(p)}
+    // | "G"~>prop ^^ {case p:sva_pro => println(s"prop1: $p");glo_prop(p)}
   )
 
-  // We don't support initial delay now
   // Use seq1,seq2 to maintain the precedence: ## > && > or
   // Unary sequence operator repetition has highest priority (in repe) 
   def seq: Parser[sva_seq] =
@@ -337,7 +400,6 @@ class sva_tree(o:Object) extends JavaTokenParsers {
   // handling reserved keyword  
   def atom_prop: Parser[atom_prop_node] = 
   (
-    
     """[a-zA-Z_]\w+""".r         ^^ {x => 
                                         {
                                           println(s"??? $x")
@@ -361,6 +423,9 @@ object svaSeq
   def svaAssert(o:Object, s:String) =
   {
     val res = o.asInstanceOf[Module].reset
+    val en = !res.asBool
+    println(s"en: $en")
+    dontTouch(en)
     val clo = o.asInstanceOf[Module].clock
     val mod = o.asInstanceOf[Module]
     val svaTree = new sva_tree(o)
@@ -369,18 +434,21 @@ object svaSeq
     println(s"$res, $syntaxTree")
     val svaSeq = syntaxTree.get.treeSerialize()
     println(svaSeq)
-    svaSeq.foreach(a => 
-      if(a.isInstanceOf[atom_prop_node])
-        dontTouch(a.asInstanceOf[atom_prop_node].signal) )
+
+    svaSeq.foreach{
+      case a: atom_prop_node => dontTouch(a.signal) 
+      case b => 
+    }
     annotate(new ChiselAnnotation {
       // Conversion to FIRRTL Annotation 
       override def toFirrtl: Annotation = 
       {
-        val svaanotation : Seq[Seq[svaElementAnno]] = svaSeq map {
+        val svaanotation : Seq[Seq[sva_node]] = svaSeq map {
           case atom_prop_node(ap) => Seq(atom_prop_anno(ap.toTarget))
           case otherOp: svaElementAnno => Seq(otherOp)
         } 
-        new svaSeqAnno(svaanotation:+Seq(ResetAnno(res.toTarget)):+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)))
+        new svaSeqAnno(svaanotation:+Seq(ResetAnno(res.toTarget)):+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
+        // new svaSeqAnno(svaanotation:+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
       }
     })
   }
@@ -390,26 +458,31 @@ object svaSeq
 
 object svaSeqAnno
 {     
-  def generateMap2p(seq:Seq[svaElementAnno]) : Map[Target,String] =
+  def generateMap2p(seq:Seq[sva_node]) : Map[Target,String] =
   {
-    println(s"before generating: $seq")
+    // to be changed
+    // println(s"before generating: $seq")
     var i:Int = 0
-    val temp = seq.collect{case atom_prop_anno(target) => target}.distinct
+    val temp = seq.collect{
+      case t: targetAnno => t.target
+      case atom_prop_anno(target) => target
+    }.distinct
     temp.map(a => a->("p" + {i+=1; i})).toMap
   }
 
 
-  def SVAAnno2PSL(s: svaSeqAnno) : Tuple3[String, Map[String,Target], Target] = 
+  def SVAAnno2PSL(s: svaSeqAnno): Tuple3[String, Map[String,Target], Target] = 
   {
     val elementSVA = s.toElementSeq().toSeq
-    // println(s"elementSVA: $elementSVA")
+    println(s"elementSVA: $elementSVA")
     val resetAn = elementSVA.filter(_.isInstanceOf[ResetAnno])
     assert(resetAn.size == 1,"only allow one reset signal")
+
     val remainSVA = elementSVA.filter(!_.isInstanceOf[ResetAnno])
-  //  println(s"remainSVA: $remainSVA")
+    // println(s"remainSVA: $remainSVA")
     val target2p = svaSeqAnno.generateMap2p(remainSVA)
     val p2target = target2p.toSeq.map{case Tuple2(k,v) => Tuple2(v,k)}.toMap
-    val seq_ =mutable.Seq(remainSVA:_*)
+    // val seq_ =mutable.Seq(remainSVA:_*)
     val deSeri = remainSVA(0).treeDeSerialize(remainSVA.tail)
     println(s"deserialization: ${deSeri}")
     val psl = "! ( G " + deSeri._1.asInstanceOf[svaElementAnno].toPSL(target2p) + " ) "
@@ -420,7 +493,7 @@ object svaSeqAnno
   }
 }
 
-case class svaSeqAnno(ttargets: Seq[Seq[svaElementAnno]]) extends MultiTargetAnnotation{
+case class svaSeqAnno(ttargets: Seq[Seq[sva_node]]) extends MultiTargetAnnotation{
   /*println(ttargets.toSeq.toString)
   println(ttargets.map(Seq(_)).toSeq.toString)*/
   //ttargets.filter(_.isInstanceOf[atom_prop_anno])
@@ -442,6 +515,9 @@ case class svaSeqAnno(ttargets: Seq[Seq[svaElementAnno]]) extends MultiTargetAnn
       {
         case atom_prop_anno(target) => renames(target).map{atom_prop_anno(_)}
         case ResetAnno(target) => renames(target).map{ResetAnno(_)}
+        case ClockAnno(target) => renames(target).map{ClockAnno(_)}
+        case EnableAnno(target) => renames(target).map{EnableAnno(_)}
+        case ModuleAnno(target) => renames(target).map{ModuleAnno(_)}
         case a => Seq(a)
       }
   )))
@@ -462,6 +538,8 @@ case class svaSeqAnno(ttargets: Seq[Seq[svaElementAnno]]) extends MultiTargetAnn
     }
   override def flat(): AnnotationSeq = crossJoin(ttargets).map(r => this.copy(r.map(Seq(_))))
   
-  def toElementSeq(): Seq[svaElementAnno] = ttargets.flatMap(_.slice(0,1))
+  def toElementSeq(): Seq[sva_node] = ttargets.flatMap(_.slice(0,1))
 }
+
+case class target2ExprAnno(getMap: Map[Target,Expression]) extends NoTargetAnnotation
 
