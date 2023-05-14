@@ -417,9 +417,12 @@ class sva_tree(o:Object) extends JavaTokenParsers {
   )  
 }
 
+trait svaStmt
+case object svaAssertStmt extends svaStmt
+case object svaAssumeStmt extends svaStmt
 
-object svaSeq
-{ 
+object svaAnno
+{
   def svaAssert(o:Object, s:String) =
   {
     val res = o.asInstanceOf[Module].reset
@@ -447,21 +450,47 @@ object svaSeq
           case atom_prop_node(ap) => Seq(atom_prop_anno(ap.toTarget))
           case otherOp: svaElementAnno => Seq(otherOp)
         } 
-        new svaSeqAnno(svaanotation:+Seq(ResetAnno(res.toTarget)):+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
-        // new svaSeqAnno(svaanotation:+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
+        new svaAssertAnno(svaanotation:+Seq(ResetAnno(res.toTarget)):+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
+        // new svaAnno(svaanotation:+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
       }
     })
   }
-}
 
+  def svaAssume(o:Object, s:String) =     
+  {
+    val res = o.asInstanceOf[Module].reset
+    val en = !res.asBool
+    println(s"en: $en")
+    dontTouch(en)
+    val clo = o.asInstanceOf[Module].clock
+    val mod = o.asInstanceOf[Module]
+    val svaTree = new sva_tree(o)
+    println(svaTree.prop6)
+    val syntaxTree = svaTree.parseAll(svaTree.prop6, s)
+    println(s"$res, $syntaxTree")
+    val svaSeq = syntaxTree.get.treeSerialize()
+    println(svaSeq)
 
-
-object svaSeqAnno
-{     
+    svaSeq.foreach{
+      case a: atom_prop_node => dontTouch(a.signal) 
+      case b => 
+    }
+    annotate(new ChiselAnnotation {
+      // Conversion to FIRRTL Annotation 
+      override def toFirrtl: Annotation = 
+      {
+        val svaanotation : Seq[Seq[sva_node]] = svaSeq map {
+          case atom_prop_node(ap) => Seq(atom_prop_anno(ap.toTarget))
+          case otherOp: svaElementAnno => Seq(otherOp)
+        } 
+        new svaAssumeAnno(svaanotation:+Seq(ResetAnno(res.toTarget)):+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
+        // new svaAnno(svaanotation:+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
+      }
+    })
+  }
+  
   def generateMap2p(seq:Seq[sva_node]) : Map[Target,String] =
   {
-    // to be changed
-    // println(s"before generating: $seq")
     var i:Int = 0
     val temp = seq.collect{
       case t: targetAnno => t.target
@@ -470,8 +499,7 @@ object svaSeqAnno
     temp.map(a => a->("p" + {i+=1; i})).toMap
   }
 
-
-  def SVAAnno2PSL(s: svaSeqAnno): Tuple3[String, Map[String,Target], Target] = 
+  def SVAAnno2PSL(s: svaAnno): Tuple4[String, Map[String,Target], Target, svaStmt] = 
   {
     val elementSVA = s.toElementSeq().toSeq
     println(s"elementSVA: $elementSVA")
@@ -480,23 +508,42 @@ object svaSeqAnno
 
     val remainSVA = elementSVA.filter(!_.isInstanceOf[ResetAnno])
     // println(s"remainSVA: $remainSVA")
-    val target2p = svaSeqAnno.generateMap2p(remainSVA)
+    val target2p = svaAnno.generateMap2p(remainSVA)
     val p2target = target2p.toSeq.map{case Tuple2(k,v) => Tuple2(v,k)}.toMap
     // val seq_ =mutable.Seq(remainSVA:_*)
     val deSeri = remainSVA(0).treeDeSerialize(remainSVA.tail)
     println(s"deserialization: ${deSeri}")
-    val psl = "! ( G " + deSeri._1.asInstanceOf[svaElementAnno].toPSL(target2p) + " ) "
-    //val psl = "!" + svaSeqAnno.toPSL(syntaxTree,target2p)
+
+    // distinguish assert with assume, assert statement need to be negated
+    val isAssert = s.isInstanceOf[svaAssertAnno]
+    val neg = if (isAssert) "! " else ""
+    val psl = neg +"( G( " + deSeri._1.asInstanceOf[svaElementAnno].toPSL(target2p) + " )) "
+
+    //val psl = "!" + svaAnno.toPSL(syntaxTree,target2p)
     println(s"psl: $psl")
     println(s"$p2target")
-    (psl,p2target,resetAn(0).asInstanceOf[ResetAnno].target)
+    val stmt = if (isAssert) svaAssertStmt else svaAssumeStmt
+    (psl,p2target,resetAn(0).asInstanceOf[ResetAnno].target,stmt)
   }
 }
 
-case class svaSeqAnno(ttargets: Seq[Seq[sva_node]]) extends MultiTargetAnnotation{
+
+
+case class svaAssumeAnno(ttargets: Seq[Seq[sva_node]]) extends svaAnno
+case class svaAssertAnno(ttargets: Seq[Seq[sva_node]]) extends svaAnno
+
+trait svaAnno extends MultiTargetAnnotation{
   /*println(ttargets.toSeq.toString)
   println(ttargets.map(Seq(_)).toSeq.toString)*/
   //ttargets.filter(_.isInstanceOf[atom_prop_anno])
+  val ttargets: Seq[Seq[sva_node]]
+  def copy(ts: Seq[Seq[sva_node]]) = {
+    this match {
+      case svaAssertAnno(ttargets) => svaAssertAnno(ts)
+      case svaAssumeAnno(ttargets) => svaAssumeAnno(ts)
+    } 
+  }
+
   override val targets: Seq[Seq[Target]] = ttargets.filter(_.isInstanceOf[atom_prop_anno]).map(t => Seq(t.asInstanceOf[atom_prop_anno].signal))
   //override duplication, but don't use it!
   //override def update(renames: RenameMap): Seq[Annotation] = Seq(duplicate(targets.map(ts => ts.flatMap(renames(_)))))
@@ -540,6 +587,8 @@ case class svaSeqAnno(ttargets: Seq[Seq[sva_node]]) extends MultiTargetAnnotatio
   
   def toElementSeq(): Seq[sva_node] = ttargets.flatMap(_.slice(0,1))
 }
+
+
 
 case class target2ExprAnno(getMap: Map[Target,Expression]) extends NoTargetAnnotation
 
