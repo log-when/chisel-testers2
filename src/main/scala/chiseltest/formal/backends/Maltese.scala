@@ -82,6 +82,7 @@ private[chiseltest] object Maltese {
     val proveChecker = checkers.head.isInstanceOf[PonoModelChecker] 
     val proveAlgor = algor match { 
       case _: KInductionCheck => true
+      case _: Ic3SaCheck => true
       case _ => false
     }
     assert(!proveAlgor | proveChecker, s"${checkers.head.name} can't prove property!")
@@ -90,12 +91,11 @@ private[chiseltest] object Maltese {
       case ModelCheckFail(witness) =>
         val writeVcd = annos.contains(WriteVcdAnnotation)
         if (writeVcd) {
-          val firstBad:String = {witness.failed}.head
+
           val hasSVA = !noSva(sysInfo.sys)
-          val hasJustice = !noJustStates(sysInfo.sys)
 
           println(s"hasSVA: ${hasSVA}")
-          println(s"hasJustice: ${hasJustice}")
+          
           // violated safety property is from assertion, try to simulate
           if(!hasSVA)
           {
@@ -111,15 +111,33 @@ private[chiseltest] object Maltese {
           else
           {
             val inputNameMap = sysInfo.sys.inputs.map(_.name).map(name => name -> sysInfo.stateMap.getOrElse(name, name)).toMap
-            val stateNameMap = sysInfo.sys.states.map(_.name).filter(sysInfo.stateMap.contains(_)).map(name => name -> {
-                sysInfo.stateMap(name)
-            }).toMap  
-            val sim = new TransitionSystemSimulator(sysInfo.sys, inputNameMap, stateNameMap, hasJustice)
+            println(s"inputNameMap: ${inputNameMap}")
+            //- show aux state temporarily
+            val stateNameMap = sysInfo.sys.states.map(_.name).map(name => name -> {
+                sysInfo.stateMap.getOrElse(name, name)
+            }).toMap 
+
+            // val stateNameMap = sysInfo.sys.states.map(_.name).filter(sysInfo.stateMap.contains(_)).map(name => name -> {
+            //     sysInfo.stateMap(name)
+            // }).toMap  
+
+
+            println(s"states: ${sysInfo.sys.states}")
+            println(s"stateNameMap: ${stateNameMap}")
+            // to be optimized
+            // if triggered property is not liveness property, aux state variable can be hidden
+            val badString = witness.failed(0)
+            val triggerJustice = triggerJust(badString)
+            println(s"triggerJustice: ${triggerJustice}")
+
+            val sim = new TransitionSystemSimulator(sysInfo.sys, inputNameMap, stateNameMap, triggerJustice)
             sim.run(witness, vcdFileName = Some((targetDir / s"${circuit.main}.bmc.vcd").toString))
           }
         }
         val failSteps = witness.inputs.length - 1 - resetLength
         throw FailedBoundedCheckException(circuit.main, failSteps)
+      
+      case ModelCheckFailNoWit() => throw FailedBoundedCheckException(circuit.main, -1)
       case ModelCheckSuccess() => // good!
       case ModelCheckProve() => // good!
     }
@@ -167,7 +185,7 @@ private[chiseltest] object Maltese {
 
     val logLevel = Seq() // Seq("-ll", "info")
     // use other way instead of removing DeadCodeElimination
-    // We need to add DoNotOptimizeFormal, else targets in SVAannotation will be eliminated.
+    
     val opts: AnnotationSeq = if (annos.contains(DoNotOptimizeFormal)) Seq() else Optimizations
     //SMTEmitter depends on FirrtlToTransitionSystem transform 
     val res = firrtlPhase.transform(
@@ -178,6 +196,7 @@ private[chiseltest] object Maltese {
       ) ++: logLevel ++: annos ++: LoweringAnnos ++: opts
     )
     val stateMap = FlattenPass.getStateMap(circuit.main, res)
+    println(s"stateMap: ${stateMap}")
     val memDepths = FlattenPass.getMemoryDepths(circuit.main, res)
     val sys = res.collectFirst { case TransitionSystemAnnotation(s) => s }.get
     
@@ -194,10 +213,10 @@ private[chiseltest] object Maltese {
     sys.signals.count(_.lbl == IsBad) == 0
 
   private def noSva(sys: TransitionSystem): Boolean =
-    sys.states.count(_.name.slice(0,7) == "baState") == 0
+    sys.states.count(_.name.slice(0,9) == "assertSta") == 0 && sys.states.count(_.name.slice(0,9) == "assumeSta") == 0
 
-  private def noJustStates(sys: TransitionSystem): Boolean =
-    sys.signals.count(_.name.slice(0,8) == "just2Bad") == 0
+  private def triggerJust(badString: String): Boolean =
+    badString.slice(0,8) == "just2Bad"
 
   private def firrtlPhase = new FirrtlPhase
 

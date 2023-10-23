@@ -12,10 +12,12 @@ private[chiseltest] class TransitionSystemSimulator(
   sys:               TransitionSystem,
   inputNameMap:      Map[String,String] = Map[String,String](),
   stateNameMap:      Map[String,String] = Map[String,String](),
-  val hasJustice: Boolean = false,
+  val triggerJustice: Boolean = false,
   val maxMemVcdSize: Int = 128,
   printUpdates:      Boolean = false) {
-
+  
+  //- be catious! is it allowed to use cha and otiginal assertion together?
+  private val hasSVA = sys.states.count(_.name.slice(0,9) == "assertSta") != 0
   private var loop = false
   private val (bvStates, arrayStates) = sys.states.partition(s => s.sym.isInstanceOf[BVSymbol])
   private val (bvSignals, arraySignals) = sys.signals.partition(s => s.e.isInstanceOf[BVExpr])
@@ -111,21 +113,34 @@ private[chiseltest] class TransitionSystemSimulator(
     withVcd: Boolean
   ): Unit = {
     // initialize vcd
+    println(s"hasSVA: ${hasSVA}")
     vcdWriter =
       if (!withVcd) None
       else {
         val vv = vcd.VCD(sys.name)
         vv.addWire("Step", 64)
-        if(hasJustice)
+        if(hasSVA)
         {
           allBV.foreach(s => 
           {
             if(stateNameMap.contains(s.name) && s.name!="_resetCount")
+            {
+              println(s"s_name, s_width: ${s.name}, ${s.width}")
               vv.addWire(stateNameMap(s.name), s.width)
+            }
             else if(inputNameMap.contains(s.name))
+            {
+              // these
+              // if (!vv.isTempWire(inputNameMap(s.name)))
+              // println(s"add input: ${inputNameMap(s.name)}");
               vv.addWire(inputNameMap(s.name), s.width)
+            }
           })
-          vv.addWire("loop",1)
+          if(triggerJustice)
+          {
+            println("with loop?")
+            vv.addWire("loop",1)
+          }
         }
         else
         {
@@ -176,7 +191,7 @@ private[chiseltest] class TransitionSystemSimulator(
     vcdWriter.foreach(_.wireChanged("Step", index))
 
     if (printUpdates) println(s"\nSTEP $index")
-    if(hasJustice)
+    if(triggerJustice)
     {
       if(data(bvNameToIndex("seen_"+bad+"_")).equals(1))
         loop = true
@@ -184,15 +199,20 @@ private[chiseltest] class TransitionSystemSimulator(
     
     // dump state
     vcdWriter.foreach { v =>
-      if(hasJustice)
+      if(hasSVA)
       {
-        if(loop)
-          v.wireChanged("loop",BigInt(1))
-        else
-          v.wireChanged("loop",BigInt(0))
+        if(triggerJustice)
+        {
+          if(loop)
+            v.wireChanged("loop",BigInt(1))
+          else
+            v.wireChanged("loop",BigInt(0))
+        }
+        println(s"bvStates: ${bvStates}")
         bvStates.foreach { state => 
-          if(stateNameMap.exists(_._1 == state.name))
-            v.wireChanged(stateNameMap(state.name), data(bvNameToIndex(state.name))) }
+          // if(stateNameMap.exists(_._1 == state.name))
+            // v.wireChanged(stateNameMap(state.name), data(bvNameToIndex(state.name))) }
+        v.wireChanged(state.name, data(bvNameToIndex(state.name))) }
       }
       else
       {
@@ -209,14 +229,24 @@ private[chiseltest] class TransitionSystemSimulator(
     sys.inputs.zipWithIndex.foreach { case (input, ii) =>
       val value = inputs(ii)
       data(ii) = value
-      if(hasJustice)
-      {
-        vcdWriter.foreach(_.wireChanged(inputNameMap(input.name), value))
+      vcdWriter.foreach{v =>
+        if(hasSVA) 
+        // Some input will be hidden because it is illegal, 
+        // like invalid value emitted by validif  
+          v.wireChanged(inputNameMap(input.name), value)
+        else
+          v.wireChanged(input.name, value)
       }
-      else
-      {
-        vcdWriter.foreach(_.wireChanged(input.name, value))
-      }
+      // if(hasSVA)
+      // {
+      //   if(inputNameMap.exists(_._1 == input.name))
+      //     println(s"what? ${inputNameMap(input.name)}; ${value}")
+      //     vcdWriter.foreach(_.wireChanged(inputNameMap(input.name), value))
+      // }
+      // else
+      // {
+      //   vcdWriter.foreach(_.wireChanged(input.name, value))
+      // }
       if (printUpdates) println(s"I: ${input.name} <- $value")
     }
 
@@ -226,8 +256,8 @@ private[chiseltest] class TransitionSystemSimulator(
         val value = eval(e)
         if (printUpdates) println(s"S: $name -> $value")
         data(bvNameToIndex(name)) = value
-        if(!hasJustice)
-         vcdWriter.foreach(_.wireChanged(name, value))
+        if(!hasSVA)
+          vcdWriter.foreach(_.wireChanged(name, value))
       case Signal(name, e: ArrayExpr, _) =>
         val value = evalArray(e)
         memories(arrayNameToIndex(name)) = value
@@ -260,6 +290,7 @@ private[chiseltest] class TransitionSystemSimulator(
       }
     }
 
+    // to be changed: pono may output witness with one more cycle!
     // check to see if any safety properties failed
     val failed = sys.signals
       .filter(_.lbl == IsBad)
@@ -305,11 +336,12 @@ private[chiseltest] class TransitionSystemSimulator(
   }
 
   def run(witness: Witness, vcdFileName: Option[String] = None): Unit = {
+
     init(witness.regInit, witness.memInit, withVcd = vcdFileName.nonEmpty)
     
     val badString = witness.failed(0)
     println(s"badString: $badString")
-    val bad = if(hasJustice) badString.slice(8,badString.size - 1).toInt else -1
+    val bad = if(triggerJustice) badString.slice(8,badString.size - 1).toInt else -1
     println(s"bad: $bad")
     
     witness.inputs.zipWithIndex.foreach { case (inputs, index) =>
@@ -322,6 +354,7 @@ private[chiseltest] class TransitionSystemSimulator(
     }
     vcdFileName.foreach { ff =>
       val vv = vcdWriter.get
+      println(s"vv: ${vv}")
       vv.wireChanged("Step", witness.inputs.size)
       vv.incrementTime()
       vv.write(ff)

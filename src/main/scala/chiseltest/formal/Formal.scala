@@ -17,8 +17,8 @@ import jhoafparser.parser.HOAFParser
 sealed trait FormalOp extends NoTargetAnnotation
 case class BoundedCheck(kMax: Int = -1) extends FormalOp
 case class KInductionCheck(kMax: Int = -1) extends FormalOp
-// IC3SA in pono can't generate witness... 
-// case class Ic3SaCheck(kMax: Int = -1) extends FormalOp
+// IC3SA in pono can't generate witness, only work when properties can be proven... 
+case class Ic3SaCheck(kMax: Int = -1) extends FormalOp
 
 /** Specifies how many cycles the circuit should be reset for. */
 case class ResetOption(cycles: Int = 1) extends NoTargetAnnotation {
@@ -89,7 +89,7 @@ private object Formal {
       backends.Maltese.bmc(state.circuit, state.annotations, kMax = kMax, resetLength = resetLength)
     case KInductionCheck(kMax) => 
       backends.Maltese.bmc(state.circuit, state.annotations, kMax = kMax, resetLength = resetLength, KInductionCheck(kMax))
-    // case Ic3SaCheck(kMax) => 
-      // backends.Maltese.bmc(state.circuit, state.annotations, kMax = kMax, resetLength = resetLength, Ic3SaCheck(kMax))
+    case Ic3SaCheck(kMax) => 
+      backends.Maltese.bmc(state.circuit, state.annotations, kMax = kMax, resetLength = resetLength, Ic3SaCheck(kMax))
   }
 }

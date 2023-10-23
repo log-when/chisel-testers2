@@ -31,71 +31,6 @@ class hoaParser extends HOAConsumer{
     var apNum: Int = 0
     var auxVarNum: Int = 0
     
-    //this process should be after parsing
-    def partialDeterministic(): Unit = 
-    {
-        for(i <- 0 until stateNum)
-        {
-            var mutualBdds: mutable.Set[BDD] = mutable.Set[BDD]()
-            var trans: mutable.Map[BDD, mutable.Set[Integer]] = transitionFunc(i)
-
-            if(trans.isEmpty)
-                throw new UnsupportedOperationException("There exists an illegal state")
-
-            var updatedEdge: mutable.Map[BDD, mutable.Set[Integer]] = mutable.Map[BDD, mutable.Set[Integer]]()
-
-            for((k,v) <- trans)
-            {
-                if(mutualBdds.isEmpty)
-                {
-                    mutualBdds += k
-                    updatedEdge += (k -> v)
-                } 
-                else
-                {
-                    var mutualBddsCopy = mutualBdds.clone()
-                    var isExclusive = true
-                    for(e <- mutualBddsCopy)
-                    {
-                        if(!(e.and(k).isZero()))
-                        {
-                            isExclusive = false
-                            mutualBdds += e.and(k)
-                            updatedEdge += (e.and(k) -> (updatedEdge(e) ++ v))
-
-                            if(!(e.and(k.not()).isZero()))
-                            {
-                                mutualBdds += e.and(k.not())
-                                updatedEdge += (e.and(k.not()) -> updatedEdge(e))
-                            }
-                            if(!(k.and(e.not()).isZero))
-                            {
-                                mutualBdds += k.and(e.not())
-                                updatedEdge += (k.and(e.not()) -> v)
-                            }
-                            
-                            mutualBdds.remove(e)
-                            updatedEdge = updatedEdge-(e)                           
-                        }
-                    }
-                    if(isExclusive)
-                    {
-                        mutualBdds += k
-                        updatedEdge += (k -> v)
-                    }
-                }
-            }
-          //  println(s"i=$i: $mutualBdds")
-            var isFull = mutualBdds.fold(bdd.zero())((e1,e2)=>e1.or(e2))
-
-            //println(isTrue)
-            if(!isFull.isOne())
-                updatedEdge += (isFull.not() ->  mutable.Set(stateNum))
-            transitionFunc(i) = updatedEdge            
-        }
-        transitionFunc += stateNum -> mutable.Map(bdd.one() -> mutable.Set(stateNum))
-    }
-
     def int2Bdd(i: Int, auxVars: Seq[Int]): BDD =
     {
         val bin = i.toBinaryString.reverse
@@ -122,6 +57,53 @@ class hoaParser extends HOAConsumer{
     }
 
     def addAuxVar(): Unit =
+    {
+        for(i <- 0 until stateNum)
+        {   
+            println(s"this state: ${i}")
+            var trans: mutable.Map[BDD, mutable.Set[Integer]] = transitionFunc(i)
+            val neededAuxVar:Int = ceil(log(trans.size)).toInt
+            // add AuxVar when there are more than 1 outgoing-edge
+            if(neededAuxVar > 0)
+            {
+                if(neededAuxVar > auxVarNum)
+                {
+                    bdd.extVarNum(neededAuxVar - auxVarNum)
+                    auxVarNum = neededAuxVar   
+                }
+                val varSeq = (apNum until apNum + neededAuxVar).toSeq
+                val trans_ = mutable.Map() ++ trans.keys.zipWithIndex.collect{
+                    case Tuple2(a:BDD, b:Int) =>
+                        println(s"map[BDD,Int] $a, $b")
+                        Tuple2(a.and(int2Bdd(b,varSeq)),trans.get(a).get)
+                }.toMap
+                transitionFunc(i)  = trans_
+                println(s"new trans: ${trans_}")  
+            }
+        }
+    }
+
+    //check all accStates are badState
+    def badAccs(): Boolean = {
+        val accISBad = accStates.map{
+            i:Int =>
+            {
+                // println(transitionFunc(i).size == 1)
+                // println(transitionFunc(i).last._1.isOne())
+                // println(transitionFunc(i).last._2)
+                // println(i)
+                transitionFunc(i).size == 1 & transitionFunc(i).last._1.isOne() &
+                transitionFunc(i).last._2.size == 1 & transitionFunc(i).last._2.head == i
+            }
+        }
+        println(s"accStates: $accStates")
+        println(accISBad.toSeq)
+        accISBad.foldLeft(true)((a,b)=> a & b)
+        false
+    }
+
+    //- old_addAuxVar is collated with old_partialDeterministic
+    def old_addAuxVar(): Unit =
     {
         /*val ran:Seq[Int] = (2 until 6).toSeq
         val testAbove = int2Bdd(13,ran)
@@ -157,22 +139,72 @@ class hoaParser extends HOAConsumer{
         }
     }
 
-    //check all accStates are badState
-    def badAccs(): Boolean = {
-        val accISBad = accStates.map{
-            i:Int =>
+    //this process should be after parsing
+    //the complexity is high and highly related to the output automata of spot
+    def old_partialDeterministic(): Unit = 
+    {
+        for(i <- 0 until stateNum)
+        {
+            var mutualBdds: mutable.Set[BDD] = mutable.Set[BDD]()
+            var trans: mutable.Map[BDD, mutable.Set[Integer]] = transitionFunc(i)
+
+            if(trans.isEmpty)
+                throw new UnsupportedOperationException("There exists an illegal state")
+
+            var updatedEdge: mutable.Map[BDD, mutable.Set[Integer]] = mutable.Map[BDD, mutable.Set[Integer]]()
+
+            for((k,v) <- trans)
             {
-                // println(transitionFunc(i).size == 1)
-                // println(transitionFunc(i).last._1.isOne())
-                // println(transitionFunc(i).last._2)
-                // println(i)
-                transitionFunc(i).size == 1 & transitionFunc(i).last._1.isOne() &
-                transitionFunc(i).last._2.size == 1 & transitionFunc(i).last._2.head == i
+                if(mutualBdds.isEmpty)
+                {
+                    mutualBdds += k
+                    updatedEdge += (k -> v)
+                } 
+                else
+                {
+                    var mutualBddsCopy = mutualBdds.clone()
+                    var isExclusive = true
+                    for(e <- mutualBddsCopy)
+                    {
+                        if(!(e.and(k).isZero()))
+                        {
+                            val oldEdge = updatedEdge(e)
+                            
+                            mutualBdds.remove(e)
+                            updatedEdge = updatedEdge-(e)
+
+                            isExclusive = false
+                            mutualBdds += e.and(k)
+                            updatedEdge += (e.and(k) -> (oldEdge ++ v))
+
+                            if(!(e.and(k.not()).isZero()))
+                            {
+                                mutualBdds += e.and(k.not())
+                                updatedEdge += (e.and(k.not()) -> oldEdge)
+                            }
+                            if(!(k.and(e.not()).isZero))
+                            {
+                                mutualBdds += k.and(e.not())
+                                updatedEdge += (k.and(e.not()) -> v)
+                            }                      
+                        }
+                    }
+                    if(isExclusive)
+                    {
+                        mutualBdds += k
+                        updatedEdge += (k -> v)
+                    }
+                }
             }
+          //  println(s"i=$i: $mutualBdds")
+            var isFull = mutualBdds.fold(bdd.zero())((e1,e2)=>e1.or(e2))
+
+            //println(isTrue)
+            if(!isFull.isOne())
+                updatedEdge += (isFull.not() ->  mutable.Set(stateNum))
+            transitionFunc(i) = updatedEdge            
         }
-        println(s"accStates: $accStates")
-        println(accISBad.toSeq)
-        accISBad.foldLeft(true)((a,b)=> a & b)
+        transitionFunc += stateNum -> mutable.Map(bdd.one() -> mutable.Set(stateNum))
     }
 
     @throws(classOf[HOAConsumerException])

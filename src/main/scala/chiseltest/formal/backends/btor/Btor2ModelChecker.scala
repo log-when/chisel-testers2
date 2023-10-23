@@ -4,7 +4,7 @@ package chiseltest.formal.backends.btor
 
 import chiseltest.formal.backends._
 import firrtl.backends.experimental.smt._
-import chiseltest.formal.{FormalOp, BoundedCheck, KInductionCheck}
+import chiseltest.formal.{FormalOp, BoundedCheck, KInductionCheck, Ic3SaCheck}
 
 import scala.util.control.Breaks._
 class BtormcModelChecker(targetDir: os.Path) extends IsModelChecker {
@@ -31,7 +31,7 @@ class BtormcModelChecker(targetDir: os.Path) extends IsModelChecker {
     // check to see if we were successful
     assert(r.exitCode == 0, s"We expect btormc to always return 0, not ${r.exitCode}. Maybe there was an error.")
     val isSat = res.nonEmpty && res.head.trim.startsWith("sat")
-
+    
     if (isSat) {
       val witness = Btor2WitnessParser.read(res, 1).head
       ModelCheckFail(Btor2ModelChecker.convertWitness(sys, witness))
@@ -68,9 +68,13 @@ class PonoModelChecker(targetDir: os.Path) extends IsModelChecker
     // assert(r.exitCode == 0, s"We expect btormc to always return 0, not ${r.exitCode}. Maybe there was an error.")
     val isSat = res.nonEmpty && res.head.trim.startsWith("sat")
 
+    val isSatNoWit = res.nonEmpty && res.head.trim.startsWith("IC3")
+    println(s"isSatNoWit: $isSatNoWit")
     if (isSat) {
       val witness = Btor2WitnessParser.read(res, 1).head
       ModelCheckFail(Btor2ModelChecker.convertWitness(sys, witness))
+    } else if(isSatNoWit){
+      ModelCheckFailNoWit()
     } else {
       ModelCheckSuccess()
     }
@@ -103,12 +107,11 @@ class PonoModelChecker(targetDir: os.Path) extends IsModelChecker
 
 object PonoModelChecker
 {
-
   def engineCommand(algor:FormalOp) = {
     algor match{
       case x: BoundedCheck => "bmc"
       case x: KInductionCheck => "ind"
-      // case x: Ic3SaCheck => "ic3sa"
+      case x: Ic3SaCheck => "ic3sa"
       case _ => "bmc"
     }
   }
@@ -119,7 +122,7 @@ object PonoModelChecker
       // Seq("-e", PonoModelChecker.engineCommand(algor)) ++
       // Seq("-p", badNum.toString) ++ 
       // Seq("-k", kMax.toString, "--witness") else Seq()
-    val cmd = Seq("pono") ++ kmaxOpt ++ Seq(filename)
+    val cmd = Seq("pono", "-v", "1") ++ kmaxOpt ++ Seq(filename)
     
     println(cmd)
     val r = os.proc(cmd).call(cwd = targetDir, check = false)
@@ -132,12 +135,16 @@ object PonoModelChecker
     // assert(r.exitCode == 0, s"We expect btormc to always return 0, not ${r.exitCode}. Maybe there was an error.")
     val isSat = res.nonEmpty && res.head.trim.startsWith("sat")
     val isUnSat = res.nonEmpty && res.head.trim.startsWith("unsat")
+    val isSatNoWit = res.nonEmpty && res.head.trim.startsWith("IC3")
+    println(s"isSatNoWit: $isSatNoWit")
 
     if (isSat) {
       val witness = Btor2WitnessParser.read(res, 1).head
       ModelCheckFail(Btor2ModelChecker.convertWitness(sys, witness))
     } else if (isUnSat) {
       ModelCheckProve()
+    } else if(isSatNoWit){
+      ModelCheckFailNoWit()
     } else {
       ModelCheckSuccess()
     }

@@ -5,7 +5,7 @@ package chiseltest.formal
 import scala.collection.mutable
 import chisel3._
 import chisel3.experimental.{ChiselAnnotation,annotate,RunFirrtlTransform}
-import firrtl.annotations.{Annotation, ReferenceTarget, SingleTargetAnnotation, Target,MultiTargetAnnotation,NoTargetAnnotation}
+import firrtl.annotations.{Annotation, ReferenceTarget, SingleTargetAnnotation, Target, MultiTargetAnnotation,NoTargetAnnotation}
 import firrtl.options.StageUtils
 import firrtl.RenameMap
 import org.json4s.JValue
@@ -133,7 +133,7 @@ trait bin_op_node[T1<: sva_node, T2<: sva_node] extends svaElementAnno
   {
     if(this.isInstanceOf[over_impl_prop])
     {
-      "{ "+ lchild.asInstanceOf[svaElementAnno].toPSL(rename2p) + " }" + opPSL + rchild.asInstanceOf[svaElementAnno].toPSL(rename2p)
+      "({ "+ lchild.asInstanceOf[svaElementAnno].toPSL(rename2p) + " }" + opPSL + rchild.asInstanceOf[svaElementAnno].toPSL(rename2p) + ")"
     }
     else
     {
@@ -169,7 +169,7 @@ case class constantFalse() extends sva_seq with svaElementAnno
   override def toSVA(f: Target => Expression): Seq[Any] = Seq("0")
 }
 case class atom_prop_node(signal:Bool) extends sva_seq
-case class atom_prop_anno(signal:Target) extends sva_seq with svaElementAnno
+case class atom_prop_anno(signal:ReferenceTarget) extends sva_seq with svaElementAnno
 {
   override def toPSL(rename2p: Map[Target,String]): String = rename2p(signal) 
   override def toSVA(f: Target => Expression): Seq[Any] = Seq(f(signal))
@@ -195,11 +195,15 @@ case class time_delay_seq(lowerBound:Int, upperBound:Int, var lchild:sva_seq, va
   }
   override def opSVA: String = opPSL
 }
-// case class and_seq(lchild:sva_seq, rchild:sva_seq) extends bin_op_seq(lchild:sva_seq, rchild:sva_seq)
+case class and_seq(var lchild:sva_seq, var rchild:sva_seq) extends bin_op_seq
+{
+  override def opPSL: String = " && "
+  override def opSVA: String = " and "
+}
 case class or_seq(var lchild:sva_seq, var rchild:sva_seq) extends bin_op_seq
 {
   override def opPSL: String = " || "
-  override def opSVA: String = "or"
+  override def opSVA: String = " or "
 }
 
 
@@ -224,12 +228,12 @@ case class next_prop(var child:sva_pro) extends un_op_pro
 case class and_prop(var lchild:sva_pro, var rchild:sva_pro) extends bin_op_pro
 {
   override def opPSL: String = " && "
-  override def opSVA: String = "and"
+  override def opSVA: String = " and "
 }
 case class or_prop(var lchild:sva_pro, var rchild:sva_pro) extends bin_op_pro
 {
   override def opPSL: String = " || "
-  override def opSVA: String = "and"
+  override def opSVA: String = " or "
 }
 case class until_prop(var lchild:sva_pro, var rchild:sva_pro) extends bin_op_pro
 {
@@ -254,7 +258,7 @@ case class fina_prop(var child:sva_pro) extends un_op_pro
   override def opPSLL: String = "F "
   override def opPSLR: String = ""
 
-  override def opSVAL: String = "eventually"
+  override def opSVAL: String = "s_eventually"
   override def opSVAR: String = ""
 }
 
@@ -354,10 +358,10 @@ class sva_tree(o:Object) extends JavaTokenParsers {
   )
   def seq2: Parser[sva_seq] = 
   (
-    // seq1~opt("&&"~seq2)             ^^ {case ~(s1,Some(~(o,s2))) =>  and_seq(s1,s2)
-    //                                   case ~(s,None) => s
-    //                                   case x => println(x); new un_op_seq(null)}
-    seq1 ^^ {case p => println(s"seq: $p"); p}
+    seq1~opt("&&"~seq2)             ^^ {case ~(s1,Some(~(o,s2))) =>  and_seq(s1,s2)
+                                      case ~(s,None) => s
+                                      case x => println(x); new atom_prop_node(false.asBool)}
+    // seq1 ^^ {case p => println(s"seq: $p"); p}
   )
   def seq1: Parser[sva_seq] = 
   (
@@ -423,6 +427,37 @@ case object svaAssumeStmt extends svaStmt
 
 object svaAnno
 {
+  def svaAssert(o:Object, e:Bool) =
+  {
+    val res = o.asInstanceOf[Module].reset
+    val en = !res.asBool
+    println(s"en: $en")
+    dontTouch(en)
+    val clo = o.asInstanceOf[Module].clock
+    val mod = o.asInstanceOf[Module]
+
+    val svaSeq =  Seq(atom_prop_node(e))
+    println(svaSeq)
+
+    svaSeq.foreach{
+      case a: atom_prop_node => dontTouch(a.signal) 
+      case b => 
+    }
+    annotate(new ChiselAnnotation {
+      // Conversion to FIRRTL Annotation 
+      override def toFirrtl: Annotation = 
+      {
+        val svaanotation : Seq[Seq[sva_node]] = svaSeq map {
+          case atom_prop_node(ap) => Seq(atom_prop_anno(ap.toTarget))
+          case otherOp: svaElementAnno => Seq(otherOp)
+        } 
+        println(s"svaAnnotation: ${svaanotation.toSeq}")
+        new svaAssertAnno(svaanotation:+Seq(ResetAnno(res.toTarget)):+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
+        // new svaAnno(svaanotation:+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
+      }
+    })
+  }
+
   def svaAssert(o:Object, s:String) =
   {
     val res = o.asInstanceOf[Module].reset
@@ -430,6 +465,7 @@ object svaAnno
     println(s"en: $en")
     dontTouch(en)
     val clo = o.asInstanceOf[Module].clock
+    dontTouch(clo)
     val mod = o.asInstanceOf[Module]
     val svaTree = new sva_tree(o)
     println(svaTree.prop6)
@@ -450,6 +486,7 @@ object svaAnno
           case atom_prop_node(ap) => Seq(atom_prop_anno(ap.toTarget))
           case otherOp: svaElementAnno => Seq(otherOp)
         } 
+        println(s"svaAnnotation: ${svaanotation.toSeq}")
         new svaAssertAnno(svaanotation:+Seq(ResetAnno(res.toTarget)):+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
         // new svaAnno(svaanotation:+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
       }
@@ -483,6 +520,8 @@ object svaAnno
           case atom_prop_node(ap) => Seq(atom_prop_anno(ap.toTarget))
           case otherOp: svaElementAnno => Seq(otherOp)
         } 
+        // println("svaAnnotation: $svaanotation")
+        println(s"ClockAnno: ${ClockAnno(clo.toTarget)}")
         new svaAssumeAnno(svaanotation:+Seq(ResetAnno(res.toTarget)):+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
         // new svaAnno(svaanotation:+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
       }
@@ -504,10 +543,10 @@ object svaAnno
     val elementSVA = s.toElementSeq().toSeq
     println(s"elementSVA: $elementSVA")
     val resetAn = elementSVA.filter(_.isInstanceOf[ResetAnno])
-    assert(resetAn.size == 1,"only allow one reset signal")
+    // assert(resetAn.size == 1,"only allow one reset signal")
 
-    val remainSVA = elementSVA.filter(!_.isInstanceOf[ResetAnno])
-    // println(s"remainSVA: $remainSVA")
+    val remainSVA = elementSVA.filter(!_.isInstanceOf[targetAnno])
+    println(s"remainSVA: $remainSVA")
     val target2p = svaAnno.generateMap2p(remainSVA)
     val p2target = target2p.toSeq.map{case Tuple2(k,v) => Tuple2(v,k)}.toMap
     // val seq_ =mutable.Seq(remainSVA:_*)
@@ -517,7 +556,7 @@ object svaAnno
     // distinguish assert with assume, assert statement need to be negated
     val isAssert = s.isInstanceOf[svaAssertAnno]
     val neg = if (isAssert) "! " else ""
-    val psl = neg +"( G( " + deSeri._1.asInstanceOf[svaElementAnno].toPSL(target2p) + " )) "
+    val psl = neg +"G(" + deSeri._1.asInstanceOf[svaElementAnno].toPSL(target2p) + ") "
 
     //val psl = "!" + svaAnno.toPSL(syntaxTree,target2p)
     println(s"psl: $psl")
@@ -551,7 +590,7 @@ trait svaAnno extends MultiTargetAnnotation{
   override def duplicate(n: Seq[Seq[Target]]): Annotation =  
   { 
     val tt:Seq[Target] = n.flatten 
-    this.copy(Seq(Seq(atom_prop_anno(tt(0))))) 
+    this.copy(Seq(Seq(constantTrue()))) 
   }
   
   //Seq(duplicate(targets.map(ts => ts.flatMap(renames(_)))))
@@ -560,9 +599,9 @@ trait svaAnno extends MultiTargetAnnotation{
     Seq(this.copy(ttargets.map(
       ts => ts.flatMap
       {
-        case atom_prop_anno(target) => renames(target).map{atom_prop_anno(_)}
+        case atom_prop_anno(target) => renames(target).map{x => atom_prop_anno(x.asInstanceOf[ReferenceTarget])}
         case ResetAnno(target) => renames(target).map{ResetAnno(_)}
-        case ClockAnno(target) => renames(target).map{ClockAnno(_)}
+        case ClockAnno(target) => {println(s"clock update: ${ClockAnno(target)}, ${renames(target).map{ClockAnno(_)}} "); renames(target).map{ClockAnno(_)}}
         case EnableAnno(target) => renames(target).map{EnableAnno(_)}
         case ModuleAnno(target) => renames(target).map{ModuleAnno(_)}
         case a => Seq(a)

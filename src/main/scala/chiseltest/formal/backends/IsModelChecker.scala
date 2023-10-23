@@ -15,6 +15,9 @@ private[chiseltest] case class ModelCheckProve() extends ModelCheckResult {overr
 private[chiseltest] case class ModelCheckFail(witness: Witness) extends ModelCheckResult {
   override def isFail: Boolean = true
 }
+private[chiseltest] case class ModelCheckFailNoWit() extends ModelCheckResult {
+  override def isFail: Boolean = true
+}
 
 private[chiseltest] trait IsModelChecker {
   def name: String
