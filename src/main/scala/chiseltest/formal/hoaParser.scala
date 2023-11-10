@@ -99,8 +99,12 @@ class hoaParser extends HOAConsumer{
         println(s"accStates: $accStates")
         println(accISBad.toSeq)
         accISBad.foldLeft(true)((a,b)=> a & b)
-        false
+        // false
     }
+
+    // def isDeterministic(): Boolean = {
+
+    // }
 
     //- old_addAuxVar is collated with old_partialDeterministic
     def old_addAuxVar(): Unit =
@@ -141,8 +145,9 @@ class hoaParser extends HOAConsumer{
 
     //this process should be after parsing
     //the complexity is high and highly related to the output automata of spot
-    def old_partialDeterministic(): Unit = 
+    def old_partialDeterministic(): Boolean = 
     {
+        var originalDeter = true
         for(i <- 0 until stateNum)
         {
             var mutualBdds: mutable.Set[BDD] = mutable.Set[BDD]()
@@ -168,6 +173,7 @@ class hoaParser extends HOAConsumer{
                     {
                         if(!(e.and(k).isZero()))
                         {
+                            originalDeter = false
                             val oldEdge = updatedEdge(e)
                             
                             mutualBdds.remove(e)
@@ -205,6 +211,7 @@ class hoaParser extends HOAConsumer{
             transitionFunc(i) = updatedEdge            
         }
         transitionFunc += stateNum -> mutable.Map(bdd.one() -> mutable.Set(stateNum))
+        originalDeter
     }
 
     @throws(classOf[HOAConsumerException])

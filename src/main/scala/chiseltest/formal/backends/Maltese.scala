@@ -92,12 +92,12 @@ private[chiseltest] object Maltese {
         val writeVcd = annos.contains(WriteVcdAnnotation)
         if (writeVcd) {
 
-          val hasSVA = !noSva(sysInfo.sys)
+          val hasCHA = !noCHA(sysInfo.sys)
 
-          println(s"hasSVA: ${hasSVA}")
+          println(s"hasCHA: ${hasCHA}")
           
           // violated safety property is from assertion, try to simulate
-          if(!hasSVA)
+          if(!hasCHA)
           {
             val sim = new TransitionSystemSimulator(sysInfo.sys)
             sim.run(witness, vcdFileName = Some((targetDir / s"${circuit.main}.bmc.vcd").toString))
@@ -212,7 +212,7 @@ private[chiseltest] object Maltese {
   private def noBadStates(sys: TransitionSystem): Boolean =
     sys.signals.count(_.lbl == IsBad) == 0
 
-  private def noSva(sys: TransitionSystem): Boolean =
+  private def noCHA(sys: TransitionSystem): Boolean =
     sys.states.count(_.name.slice(0,9) == "assertSta") == 0 && sys.states.count(_.name.slice(0,9) == "assumeSta") == 0
 
   private def triggerJust(badString: String): Boolean =

@@ -17,7 +17,7 @@ private[chiseltest] class TransitionSystemSimulator(
   printUpdates:      Boolean = false) {
   
   //- be catious! is it allowed to use cha and otiginal assertion together?
-  private val hasSVA = sys.states.count(_.name.slice(0,9) == "assertSta") != 0
+  private val hasCHA = sys.states.count(_.name.slice(0,9) == "assertSta") != 0
   private var loop = false
   private val (bvStates, arrayStates) = sys.states.partition(s => s.sym.isInstanceOf[BVSymbol])
   private val (bvSignals, arraySignals) = sys.signals.partition(s => s.e.isInstanceOf[BVExpr])
@@ -113,13 +113,13 @@ private[chiseltest] class TransitionSystemSimulator(
     withVcd: Boolean
   ): Unit = {
     // initialize vcd
-    println(s"hasSVA: ${hasSVA}")
+    println(s"hasCHA: ${hasCHA}")
     vcdWriter =
       if (!withVcd) None
       else {
         val vv = vcd.VCD(sys.name)
         vv.addWire("Step", 64)
-        if(hasSVA)
+        if(hasCHA)
         {
           allBV.foreach(s => 
           {
@@ -199,7 +199,7 @@ private[chiseltest] class TransitionSystemSimulator(
     
     // dump state
     vcdWriter.foreach { v =>
-      if(hasSVA)
+      if(hasCHA)
       {
         if(triggerJustice)
         {
@@ -230,14 +230,14 @@ private[chiseltest] class TransitionSystemSimulator(
       val value = inputs(ii)
       data(ii) = value
       vcdWriter.foreach{v =>
-        if(hasSVA) 
+        if(hasCHA) 
         // Some input will be hidden because it is illegal, 
         // like invalid value emitted by validif  
           v.wireChanged(inputNameMap(input.name), value)
         else
           v.wireChanged(input.name, value)
       }
-      // if(hasSVA)
+      // if(hasCHA)
       // {
       //   if(inputNameMap.exists(_._1 == input.name))
       //     println(s"what? ${inputNameMap(input.name)}; ${value}")
@@ -256,7 +256,7 @@ private[chiseltest] class TransitionSystemSimulator(
         val value = eval(e)
         if (printUpdates) println(s"S: $name -> $value")
         data(bvNameToIndex(name)) = value
-        if(!hasSVA)
+        if(!hasCHA)
           vcdWriter.foreach(_.wireChanged(name, value))
       case Signal(name, e: ArrayExpr, _) =>
         val value = evalArray(e)
@@ -355,6 +355,7 @@ private[chiseltest] class TransitionSystemSimulator(
     vcdFileName.foreach { ff =>
       val vv = vcdWriter.get
       println(s"vv: ${vv}")
+      println(s"ff: ${ff}")
       vv.wireChanged("Step", witness.inputs.size)
       vv.incrementTime()
       vv.write(ff)

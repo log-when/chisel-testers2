@@ -122,7 +122,7 @@ object PonoModelChecker
       // Seq("-e", PonoModelChecker.engineCommand(algor)) ++
       // Seq("-p", badNum.toString) ++ 
       // Seq("-k", kMax.toString, "--witness") else Seq()
-    val cmd = Seq("pono", "-v", "1") ++ kmaxOpt ++ Seq(filename)
+    val cmd = Seq("pono") ++ kmaxOpt ++ Seq(filename)
     
     println(cmd)
     val r = os.proc(cmd).call(cwd = targetDir, check = false)
