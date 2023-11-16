@@ -110,7 +110,7 @@ trait un_op_node[T<: cha_node] extends chaElementAnno
   }
   override def toPSL(rename2p: Map[Target,String]): String = "(" + opPSLL + child.asInstanceOf[chaElementAnno].toPSL(rename2p) + opPSLR +")" +
     ""
-  override def toSVA(f: Target => Expression): Seq[Any] = Seq("(", opSVAL, child.asInstanceOf[chaElementAnno].toSVA(f) , opSVAR ,")")
+  override def toSVA(f: Target => Expression): Seq[Any] = Seq("(", opSVAL, child.asInstanceOf[chaElementAnno].toSVA(f) , opSVAR, ")")
 }
 
 trait bin_op_node[T1<: cha_node, T2<: cha_node] extends chaElementAnno
@@ -131,7 +131,7 @@ trait bin_op_node[T1<: cha_node, T2<: cha_node] extends chaElementAnno
   // A strange error when using match-case 
   override def toPSL(rename2p: Map[Target,String]): String = 
   {
-    if(this.isInstanceOf[over_impl_prop])
+    if(this.isInstanceOf[over_impl_prop] || this.isInstanceOf[noover_impl_prop])
     {
       "({ "+ lchild.asInstanceOf[chaElementAnno].toPSL(rename2p) + " }" + opPSL + rchild.asInstanceOf[chaElementAnno].toPSL(rename2p) + ")"
     }
@@ -143,14 +143,7 @@ trait bin_op_node[T1<: cha_node, T2<: cha_node] extends chaElementAnno
 
   override def toSVA(f: Target => Expression): Seq[Any] = 
   {
-    if(this.isInstanceOf[over_impl_prop])
-    {
-      Seq(lchild.asInstanceOf[chaElementAnno].toSVA(f) , opSVA , rchild.asInstanceOf[chaElementAnno].toSVA(f))
-    }
-    else
-    {
-      Seq(lchild.asInstanceOf[chaElementAnno].toSVA(f) , opSVA , rchild.asInstanceOf[chaElementAnno].toSVA(f))
-    }
+    Seq("(", lchild.asInstanceOf[chaElementAnno].toSVA(f) , opSVA , rchild.asInstanceOf[chaElementAnno].toSVA(f), ")")
   }
 }
 
@@ -191,7 +184,7 @@ case class time_delay_seq(lowerBound:Int, upperBound:Int, var lchild:cha_seq, va
   override def opPSL: String = 
   {
     val upperBounds:String = if(upperBound == -1) "$" else upperBound.toString()
-    "##[" + lowerBound + ":" + upperBounds + "]"
+    " ##[" + lowerBound + ":" + upperBounds + "] "
   }
   override def opSVA: String = opPSL
 }
@@ -215,14 +208,14 @@ case class not_prop(var child:cha_pro) extends un_op_pro
 {
   override def opPSLL: String = "! "
   override def opPSLR: String = ""
-  override def opSVAL: String = "not"
+  override def opSVAL: String = "not "
   override def opSVAR: String = opPSLR
 }
 case class next_prop(var child:cha_pro) extends un_op_pro
 {
-  override def opPSLL: String = "X"
+  override def opPSLL: String = "X "
   override def opPSLR: String = ""
-  override def opSVAL: String = "nexttime"
+  override def opSVAL: String = "nexttime "
   override def opSVAR: String = opPSLR
 }
 case class and_prop(var lchild:cha_pro, var rchild:cha_pro) extends bin_op_pro
@@ -238,7 +231,7 @@ case class or_prop(var lchild:cha_pro, var rchild:cha_pro) extends bin_op_pro
 case class until_prop(var lchild:cha_pro, var rchild:cha_pro) extends bin_op_pro
 {
   override def opPSL: String = " U "
-  override def opSVA: String = "until"
+  override def opSVA: String = " s_until "
 }
 case class impl_prop(var lchild:cha_pro, var rchild:cha_pro) extends bin_op_pro
 {
@@ -250,7 +243,7 @@ case class glo_prop(var child:cha_pro) extends un_op_pro
   override def opPSLL: String = "G "
   override def opPSLR: String = ""
 
-  override def opSVAL: String = "always"
+  override def opSVAL: String = "always "
   override def opSVAR: String = ""
 }
 case class fina_prop(var child:cha_pro) extends un_op_pro
@@ -258,7 +251,7 @@ case class fina_prop(var child:cha_pro) extends un_op_pro
   override def opPSLL: String = "F "
   override def opPSLR: String = ""
 
-  override def opSVAL: String = "s_eventually"
+  override def opSVAL: String = "s_eventually "
   override def opSVAR: String = ""
 }
 
@@ -267,6 +260,13 @@ case class over_impl_prop(var lchild:cha_seq, var rchild:cha_pro) extends bin_op
   override def opPSL: String = " []-> "
   override def opSVA: String = " |-> "
 }
+
+case class noover_impl_prop(var lchild:cha_seq, var rchild:cha_pro) extends bin_op_node[cha_seq, cha_pro] with cha_pro
+{
+  override def opPSL: String = " []=> "
+  override def opSVA: String = " |=> "
+}
+
 case class prompt_prop(var child:cha_seq) extends un_op_node[cha_seq] with cha_pro
 {
   override def opPSLL: String = ""
@@ -279,15 +279,6 @@ case class prompt_prop(var child:cha_seq) extends un_op_node[cha_seq] with cha_p
     "(" + "{" + child.asInstanceOf[chaElementAnno].toPSL(rename2p) + "}" +")" 
   }
 }
-// case class NoneOp() extends cha_node
-
-
-// case class NoneOp() extends cha_node
-// case class ResetAnno(target:Target) extends cha_node
-// {
-//   override def toPSL(rename2p: Map[Target,String]): String = {println("Misuse this API"); ""}
-//   override def toSVA(f: Target => Expression): Seq[Any] = {println("Misuse this API"); ""}
-// }
 
 trait targetAnno extends cha_node
 {
@@ -306,40 +297,41 @@ class cha_tree(o:Object) extends JavaTokenParsers {
   )
   def prop6: Parser[cha_pro] =
   (
-      "G"~>prop6                    ^^ {case p:cha_pro => println(s"prop5: $p"); glo_prop(p)}
-    | "F"~>prop6                    ^^ {case p:cha_pro => println(s"prop5: $p"); fina_prop(p)}
-    | prop5                         ^^ {case p:cha_pro => println(s"prop5: $p"); p}
+      "G"~>prop6                    ^^ {case p:cha_pro =>  glo_prop(p)}
+    | "F"~>prop6                    ^^ {case p:cha_pro =>  fina_prop(p)}
+    | prop5                         ^^ {case p:cha_pro =>  p}
   )
   def prop5: Parser[cha_pro] =
   (
-    seq~"|->"~prop6                 ^^ {case ~(~(p1,o),p2) =>  println(s"prop4: $p1 $p2"); over_impl_prop(p1,p2)}
-    | prop4                         ^^ {case p:cha_pro => println(s"prop4: $p"); p}
+    seq~"|->"~prop6                 ^^ {case ~(~(p1,o),p2) =>  over_impl_prop(p1,p2)}
+    | seq~"|=>"~prop6                 ^^ {case ~(~(p1,o),p2) =>  noover_impl_prop(p1,p2)}
+    | prop4                         ^^ {case p:cha_pro =>  p}
   )
   def prop4: Parser[cha_pro] =
   (
-      prop3~"U"~prop6               ^^ {case ~(~(p1,o),p2) =>  println(s"prop3: $p1 $p2"); until_prop(p1,p2)}
-    | prop3~"->"~prop6              ^^ {case ~(~(p1,o),p2) =>  println(s"prop3: $p1 $p2"); impl_prop(p1,p2)}
+      prop3~"U"~prop6               ^^ {case ~(~(p1,o),p2) =>  until_prop(p1,p2)}
+    | prop3~"->"~prop6              ^^ {case ~(~(p1,o),p2) =>  impl_prop(p1,p2)}
     | prop3                         ^^ {case p:cha_pro =>  p}
   )
   def prop3: Parser[cha_pro] =
   (
-    prop2~opt("||"~prop6)           ^^ {case ~(p1,Some(~(o,p2))) =>  or_prop(p1,p2)
+    prop2~opt("||"~prop6)           ^^ {case ~(p1,Some(~(o,p2))) => or_prop(p1,p2)
                                       case ~(p,None) => p}
   )
   def prop2: Parser[cha_pro] =
   (
-    prop1~opt("&&"~prop6)           ^^ {case ~(p1,Some(~(o,p2))) =>  and_prop(p1,p2)
+    prop1~opt("&&"~prop6)           ^^ {case ~(p1,Some(~(o,p2))) => and_prop(p1,p2)
                                       case ~(p,None) => p}
   )
   def prop1: Parser[cha_pro] = 
   (
-      "!"~>prop1 ^^ {case p:cha_pro => println(s"prop1: $p");not_prop(p)}  
-    | "X"~>prop1 ^^ {case p:cha_pro => println(s"prop1: $p");next_prop(p)}
-    | seq       ^^ {case s:cha_seq => println(s"prop1: $s");prompt_prop(s)}
-    | "("~>prop<~")" ^^{case p:cha_pro => println(s"prop1: $p");p}
-    // |  "!"~>prop ^^ {case p:cha_pro => println(s"prop1: $p");not_prop(p)}  
-    // | "X"~>prop ^^ {case p:cha_pro => println(s"prop1: $p");next_prop(p)}
-    // | "G"~>prop ^^ {case p:cha_pro => println(s"prop1: $p");glo_prop(p)}
+      "!"~>prop1 ^^ {case p:cha_pro => not_prop(p)}  
+    | "X"~>prop1 ^^ {case p:cha_pro => next_prop(p)}
+    | seq       ^^ {case s:cha_seq => prompt_prop(s)}
+    | "("~>prop<~")" ^^{case p:cha_pro => p}
+    // |  "!"~>prop ^^ {case p:cha_pro => not_prop(p)}  
+    // | "X"~>prop ^^ {case p:cha_pro => next_prop(p)}
+    // | "G"~>prop ^^ {case p:cha_pro => glo_prop(p)}
   )
 
   // Use seq1,seq2 to maintain the precedence: ## > && > or
@@ -347,27 +339,27 @@ class cha_tree(o:Object) extends JavaTokenParsers {
   def seq: Parser[cha_seq] =
   (
     opt(time_delay)~seq3         ^^ {case ~(Some(t),s) =>  time_delay_seq(t.lowerBound,t.upperBound,constantTrue(),s)
-                                        case ~(None,s) => s
+                                     case ~(None,s) => s
                                             }
   )
   def seq3: Parser[cha_seq] = 
   (
-    seq2~opt("||"~seq)              ^^ {case ~(s1,Some(~(o,s2))) =>  or_seq(s1,s2)
-                                      case ~(s,None) => println(s"seq2: $s"); s
-                                      case x => println(x); new atom_prop_node(false.asBool)}
+    seq2~opt("|"~seq)              ^^ {case ~(s1,Some(~(o,s2))) =>  or_seq(s1,s2)
+                                      case ~(s,None) =>  s
+                                      case x => new atom_prop_node(false.asBool)}
   )
   def seq2: Parser[cha_seq] = 
   (
-    seq1~opt("&&"~seq2)             ^^ {case ~(s1,Some(~(o,s2))) =>  and_seq(s1,s2)
+    seq1~opt("&"~seq2)             ^^ {case ~(s1,Some(~(o,s2))) =>  and_seq(s1,s2)
                                       case ~(s,None) => s
-                                      case x => println(x); new atom_prop_node(false.asBool)}
+                                      case x => new atom_prop_node(false.asBool)}
     // seq1 ^^ {case p => println(s"seq: $p"); p}
   )
   def seq1: Parser[cha_seq] = 
   (
     repe~opt(time_delay~seq1)       ^^ {case ~(r,Some(~(t,s))) =>  time_delay_seq(t.lowerBound,t.upperBound,r,s)
                                       case ~(r,None) => r
-                                      case x => println(x); new atom_prop_node(false.asBool)}
+                                      case x => new atom_prop_node(false.asBool)}
   )
     
   //##m, ##[m:n], ##[*], ##[+]
@@ -379,11 +371,11 @@ class cha_tree(o:Object) extends JavaTokenParsers {
   )
   def repe: Parser[cha_seq] = 
   (
-      atom_prop~opt(repe_range)     ^^ {case ~(ap,Some(r)) => println(s"repe $ap, $r"); repe_seq(r.lowerBound,r.upperBound,ap)
-                                      case ~(ap,None)    => println(s"repe $ap"); ap}
+      atom_prop~opt(repe_range)     ^^ {case ~(ap,Some(r)) => repe_seq(r.lowerBound,r.upperBound,ap)
+                                      case ~(ap,None)    => ap}
     | "("~>seq~")"~opt(repe_range)  ^^ {case ~(~(seq,")"),Some(r)) => repe_seq(r.lowerBound,r.upperBound,seq)
                                       case ~(~(seq,")"),None) => seq
-                                      case _ => println("what happened?"); new atom_prop_node(false.asBool)}
+                                      case _ => new atom_prop_node(false.asBool)}
   )
   //[*m], [*m:n], [*m:$], [*], [+] 
   def repe_range: Parser[repe_op] = 
@@ -406,14 +398,12 @@ class cha_tree(o:Object) extends JavaTokenParsers {
   (
     """[a-zA-Z_]\w+""".r         ^^ {x => 
                                         {
-                                          println(s"??? $x")
                                           //Notice: no exception handling
                                           val variable = o.getClass.getMethod(x).invoke(o)
                                           atom_prop_node(variable.asInstanceOf[Bool])
                                         }}
     | """[a-zA-Z_&&[^XFG]]""".r  ^^ {x => 
                                         {
-                                          println(s"??? $x")
                                           //Notice: no exception handling
                                           val variable = o.getClass.getMethod(x).invoke(o)
                                           atom_prop_node(variable.asInstanceOf[Bool])
@@ -427,52 +417,18 @@ case object chaAssumeStmt extends chaStmt
 
 object chaAnno
 {
-  def chaAssert(o:Object, e:Bool) =
-  {
-    val res = o.asInstanceOf[Module].reset
-    val en = !res.asBool
-    println(s"en: $en")
-    dontTouch(en)
-    val clo = o.asInstanceOf[Module].clock
-    val mod = o.asInstanceOf[Module]
-
-    val chaSeq =  Seq(atom_prop_node(e))
-    println(chaSeq)
-
-    chaSeq.foreach{
-      case a: atom_prop_node => dontTouch(a.signal) 
-      case b => 
-    }
-    annotate(new ChiselAnnotation {
-      // Conversion to FIRRTL Annotation 
-      override def toFirrtl: Annotation = 
-      {
-        val chaanotation : Seq[Seq[cha_node]] = chaSeq map {
-          case atom_prop_node(ap) => Seq(atom_prop_anno(ap.toTarget))
-          case otherOp: chaElementAnno => Seq(otherOp)
-        } 
-        println(s"chaAnnotation: ${chaanotation.toSeq}")
-        new chaAssertAnno(chaanotation:+Seq(ResetAnno(res.toTarget)):+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
-        // new chaAnno(chaanotation:+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
-      }
-    })
-  }
-
   def chaAssert(o:Object, s:String) =
   {
     val res = o.asInstanceOf[Module].reset
     val en = !res.asBool
-    println(s"en: $en")
     dontTouch(en)
     val clo = o.asInstanceOf[Module].clock
     dontTouch(clo)
     val mod = o.asInstanceOf[Module]
     val chaTree = new cha_tree(o)
-    println(chaTree.prop6)
     val syntaxTree = chaTree.parseAll(chaTree.prop6, s)
-    println(s"$res, $syntaxTree")
+    // println(s"$res, $syntaxTree")
     val chaSeq = syntaxTree.get.treeSerialize()
-    println(chaSeq)
 
     chaSeq.foreach{
       case a: atom_prop_node => dontTouch(a.signal) 
@@ -486,7 +442,7 @@ object chaAnno
           case atom_prop_node(ap) => Seq(atom_prop_anno(ap.toTarget))
           case otherOp: chaElementAnno => Seq(otherOp)
         } 
-        println(s"chaAnnotation: ${chaanotation.toSeq}")
+        // println(s"chaAnnotation: ${chaanotation.toSeq}")
         new chaAssertAnno(chaanotation:+Seq(ResetAnno(res.toTarget)):+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
         // new chaAnno(chaanotation:+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
       }
@@ -497,16 +453,13 @@ object chaAnno
   {
     val res = o.asInstanceOf[Module].reset
     val en = !res.asBool
-    println(s"en: $en")
     dontTouch(en)
     val clo = o.asInstanceOf[Module].clock
     val mod = o.asInstanceOf[Module]
     val chaTree = new cha_tree(o)
-    println(chaTree.prop6)
     val syntaxTree = chaTree.parseAll(chaTree.prop6, s)
-    println(s"$res, $syntaxTree")
+    // println(s"$res, $syntaxTree")
     val chaSeq = syntaxTree.get.treeSerialize()
-    println(chaSeq)
 
     chaSeq.foreach{
       case a: atom_prop_node => dontTouch(a.signal) 
@@ -520,10 +473,7 @@ object chaAnno
           case atom_prop_node(ap) => Seq(atom_prop_anno(ap.toTarget))
           case otherOp: chaElementAnno => Seq(otherOp)
         } 
-        // println("chaAnnotation: $chaanotation")
-        println(s"ClockAnno: ${ClockAnno(clo.toTarget)}")
         new chaAssumeAnno(chaanotation:+Seq(ResetAnno(res.toTarget)):+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
-        // new chaAnno(chaanotation:+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
       }
     })
   }
@@ -541,17 +491,17 @@ object chaAnno
   def CHAAnno2PSL(s: chaAnno): Tuple4[String, Map[String,Target], Target, chaStmt] = 
   {
     val elementCHA = s.toElementSeq().toSeq
-    println(s"elementCHA: $elementCHA")
+    // println(s"elementCHA: $elementCHA")
     val resetAn = elementCHA.filter(_.isInstanceOf[ResetAnno])
     // assert(resetAn.size == 1,"only allow one reset signal")
 
     val remainCHA = elementCHA.filter(!_.isInstanceOf[targetAnno])
-    println(s"remainCHA: $remainCHA")
+    // println(s"remainCHA: $remainCHA")
     val target2p = chaAnno.generateMap2p(remainCHA)
     val p2target = target2p.toSeq.map{case Tuple2(k,v) => Tuple2(v,k)}.toMap
     // val seq_ =mutable.Seq(remainCHA:_*)
     val deSeri = remainCHA(0).treeDeSerialize(remainCHA.tail)
-    println(s"deserialization: ${deSeri}")
+    // println(s"deserialization: ${deSeri}")
 
     // distinguish assert with assume, assert statement need to be negated
     val isAssert = s.isInstanceOf[chaAssertAnno]
@@ -559,8 +509,8 @@ object chaAnno
     val psl = neg +"G(" + deSeri._1.asInstanceOf[chaElementAnno].toPSL(target2p) + ") "
 
     //val psl = "!" + chaAnno.toPSL(syntaxTree,target2p)
-    println(s"psl: $psl")
-    println(s"$p2target")
+    // println(s"psl: $psl")
+    // println(s"$p2target")
     val stmt = if (isAssert) chaAssertStmt else chaAssumeStmt
     (psl,p2target,resetAn(0).asInstanceOf[ResetAnno].target,stmt)
   }
@@ -572,8 +522,6 @@ case class chaAssumeAnno(ttargets: Seq[Seq[cha_node]]) extends chaAnno
 case class chaAssertAnno(ttargets: Seq[Seq[cha_node]]) extends chaAnno
 
 trait chaAnno extends MultiTargetAnnotation{
-  /*println(ttargets.toSeq.toString)
-  println(ttargets.map(Seq(_)).toSeq.toString)*/
   //ttargets.filter(_.isInstanceOf[atom_prop_anno])
   val ttargets: Seq[Seq[cha_node]]
   def copy(ts: Seq[Seq[cha_node]]) = {
@@ -601,7 +549,7 @@ trait chaAnno extends MultiTargetAnnotation{
       {
         case atom_prop_anno(target) => renames(target).map{x => atom_prop_anno(x.asInstanceOf[ReferenceTarget])}
         case ResetAnno(target) => renames(target).map{ResetAnno(_)}
-        case ClockAnno(target) => {println(s"clock update: ${ClockAnno(target)}, ${renames(target).map{ClockAnno(_)}} "); renames(target).map{ClockAnno(_)}}
+        case ClockAnno(target) => {renames(target).map{ClockAnno(_)}}
         case EnableAnno(target) => renames(target).map{EnableAnno(_)}
         case ModuleAnno(target) => renames(target).map{ModuleAnno(_)}
         case a => Seq(a)
