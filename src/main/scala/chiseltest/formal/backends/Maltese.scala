@@ -94,8 +94,7 @@ private[chiseltest] object Maltese {
 
           val hasCHA = !noCHA(sysInfo.sys)
 
-          println(s"hasCHA: ${hasCHA}")
-          
+          // println(s"hasCHA: ${hasCHA}")
           // violated safety property is from assertion, try to simulate
           if(!hasCHA)
           {
@@ -111,24 +110,19 @@ private[chiseltest] object Maltese {
           else
           {
             val inputNameMap = sysInfo.sys.inputs.map(_.name).map(name => name -> sysInfo.stateMap.getOrElse(name, name)).toMap
-            println(s"inputNameMap: ${inputNameMap}")
+            // println(s"inputNameMap: ${inputNameMap}")
             //- show aux state temporarily
             val stateNameMap = sysInfo.sys.states.map(_.name).map(name => name -> {
                 sysInfo.stateMap.getOrElse(name, name)
             }).toMap 
 
-            // val stateNameMap = sysInfo.sys.states.map(_.name).filter(sysInfo.stateMap.contains(_)).map(name => name -> {
-            //     sysInfo.stateMap(name)
-            // }).toMap  
-
-
-            println(s"states: ${sysInfo.sys.states}")
-            println(s"stateNameMap: ${stateNameMap}")
+            // println(s"states: ${sysInfo.sys.states}")
+            // println(s"stateNameMap: ${stateNameMap}")
             // to be optimized
             // if triggered property is not liveness property, aux state variable can be hidden
             val badString = witness.failed(0)
             val triggerJustice = triggerJust(badString)
-            println(s"triggerJustice: ${triggerJustice}")
+            // println(s"triggerJustice: ${triggerJustice}")
 
             val sim = new TransitionSystemSimulator(sysInfo.sys, inputNameMap, stateNameMap, triggerJustice)
             sim.run(witness, vcdFileName = Some((targetDir / s"${circuit.main}.bmc.vcd").toString))
@@ -139,7 +133,7 @@ private[chiseltest] object Maltese {
       
       case ModelCheckFailNoWit() => throw FailedBoundedCheckException(circuit.main, -1)
       case ModelCheckSuccess() => // good!
-      case ModelCheckProve() => // good!
+      case ModelCheckProve(badNum) => println(s"Property $badNum can be proven!")
     }
   }
 
@@ -196,7 +190,7 @@ private[chiseltest] object Maltese {
       ) ++: logLevel ++: annos ++: LoweringAnnos ++: opts
     )
     val stateMap = FlattenPass.getStateMap(circuit.main, res)
-    println(s"stateMap: ${stateMap}")
+    // println(s"stateMap: ${stateMap}")
     val memDepths = FlattenPass.getMemoryDepths(circuit.main, res)
     val sys = res.collectFirst { case TransitionSystemAnnotation(s) => s }.get
     

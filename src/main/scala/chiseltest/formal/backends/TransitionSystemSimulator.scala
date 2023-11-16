@@ -113,7 +113,6 @@ private[chiseltest] class TransitionSystemSimulator(
     withVcd: Boolean
   ): Unit = {
     // initialize vcd
-    println(s"hasCHA: ${hasCHA}")
     vcdWriter =
       if (!withVcd) None
       else {
@@ -125,14 +124,11 @@ private[chiseltest] class TransitionSystemSimulator(
           {
             if(stateNameMap.contains(s.name) && s.name!="_resetCount")
             {
-              println(s"s_name, s_width: ${s.name}, ${s.width}")
+              // println(s"s_name, s_width: ${s.name}, ${s.width}")
               vv.addWire(stateNameMap(s.name), s.width)
             }
             else if(inputNameMap.contains(s.name))
             {
-              // these
-              // if (!vv.isTempWire(inputNameMap(s.name)))
-              // println(s"add input: ${inputNameMap(s.name)}");
               vv.addWire(inputNameMap(s.name), s.width)
             }
           })
@@ -208,7 +204,7 @@ private[chiseltest] class TransitionSystemSimulator(
           else
             v.wireChanged("loop",BigInt(0))
         }
-        println(s"bvStates: ${bvStates}")
+        // println(s"bvStates: ${bvStates}")
         bvStates.foreach { state => 
           // if(stateNameMap.exists(_._1 == state.name))
             // v.wireChanged(stateNameMap(state.name), data(bvNameToIndex(state.name))) }
@@ -340,9 +336,9 @@ private[chiseltest] class TransitionSystemSimulator(
     init(witness.regInit, witness.memInit, withVcd = vcdFileName.nonEmpty)
     
     val badString = witness.failed(0)
-    println(s"badString: $badString")
+    // println(s"badString: $badString")
     val bad = if(triggerJustice) badString.slice(8,badString.size - 1).toInt else -1
-    println(s"bad: $bad")
+    // println(s"bad: $bad")
     
     witness.inputs.zipWithIndex.foreach { case (inputs, index) =>
       // on the last step we expect the bad states to be entered
@@ -353,9 +349,8 @@ private[chiseltest] class TransitionSystemSimulator(
       }
     }
     vcdFileName.foreach { ff =>
+      // println(s"ff: $ff")
       val vv = vcdWriter.get
-      println(s"vv: ${vv}")
-      println(s"ff: ${ff}")
       vv.wireChanged("Step", witness.inputs.size)
       vv.incrementTime()
       vv.write(ff)

@@ -37,8 +37,6 @@ class hoaParser extends HOAConsumer{
         val auxVars_ : Seq[BDD] = auxVars.zipWithIndex.collect{
             case Tuple2(a:Int,b:Int) => 
             {
-                /*println(a,b)
-                println(bin.length())*/
                 if(b < bin.length() && bin(b) == '1')
                     bdd.ithVar(a)    
                 else
@@ -60,7 +58,6 @@ class hoaParser extends HOAConsumer{
     {
         for(i <- 0 until stateNum)
         {   
-            println(s"this state: ${i}")
             var trans: mutable.Map[BDD, mutable.Set[Integer]] = transitionFunc(i)
             val neededAuxVar:Int = ceil(log(trans.size)).toInt
             // add AuxVar when there are more than 1 outgoing-edge
@@ -74,11 +71,11 @@ class hoaParser extends HOAConsumer{
                 val varSeq = (apNum until apNum + neededAuxVar).toSeq
                 val trans_ = mutable.Map() ++ trans.keys.zipWithIndex.collect{
                     case Tuple2(a:BDD, b:Int) =>
-                        println(s"map[BDD,Int] $a, $b")
+                        // println(s"map[BDD,Int] $a, $b")
                         Tuple2(a.and(int2Bdd(b,varSeq)),trans.get(a).get)
                 }.toMap
                 transitionFunc(i)  = trans_
-                println(s"new trans: ${trans_}")  
+                // println(s"new trans: ${trans_}")  
             }
         }
     }
@@ -88,18 +85,12 @@ class hoaParser extends HOAConsumer{
         val accISBad = accStates.map{
             i:Int =>
             {
-                // println(transitionFunc(i).size == 1)
-                // println(transitionFunc(i).last._1.isOne())
-                // println(transitionFunc(i).last._2)
-                // println(i)
                 transitionFunc(i).size == 1 & transitionFunc(i).last._1.isOne() &
                 transitionFunc(i).last._2.size == 1 & transitionFunc(i).last._2.head == i
             }
         }
-        println(s"accStates: $accStates")
-        println(accISBad.toSeq)
+        // println(accISBad.toSeq)
         accISBad.foldLeft(true)((a,b)=> a & b)
-        // false
     }
 
     // def isDeterministic(): Boolean = {
@@ -109,9 +100,6 @@ class hoaParser extends HOAConsumer{
     //- old_addAuxVar is collated with old_partialDeterministic
     def old_addAuxVar(): Unit =
     {
-        /*val ran:Seq[Int] = (2 until 6).toSeq
-        val testAbove = int2Bdd(13,ran)
-        println(testAbove)*/
         for(i <- 0 until stateNum)
         {
             var trans: mutable.Map[BDD, mutable.Set[Integer]] = transitionFunc(i)
@@ -121,7 +109,6 @@ class hoaParser extends HOAConsumer{
             {
                 if(v.size > 1)
                 {
-                  //  println(s"need aux: $k")
                     trans_.remove(k)
                     val neededAuxVar:Int = ceil(log(v.size)).toInt
                     if(neededAuxVar > auxVarNum)
@@ -129,8 +116,6 @@ class hoaParser extends HOAConsumer{
                         bdd.extVarNum(neededAuxVar - auxVarNum)
                         auxVarNum = neededAuxVar   
                     }
-                    /*println(s"v_size: ${ceil(log(v.size))}")
-                    println(s"neededAuxVar: ${neededAuxVar}")*/
                     val varSeq = (apNum until apNum + neededAuxVar).toSeq
                     trans_ ++= mutable.Map() ++ v.zipWithIndex.collect{
                         case Tuple2(a:Integer, b:Int) =>
@@ -202,10 +187,7 @@ class hoaParser extends HOAConsumer{
                     }
                 }
             }
-          //  println(s"i=$i: $mutualBdds")
             var isFull = mutualBdds.fold(bdd.zero())((e1,e2)=>e1.or(e2))
-
-            //println(isTrue)
             if(!isFull.isOne())
                 updatedEdge += (isFull.not() ->  mutable.Set(stateNum))
             transitionFunc(i) = updatedEdge            
@@ -220,7 +202,6 @@ class hoaParser extends HOAConsumer{
         stateNum = numberOfStates
         
         stateBits = ceil(log(numberOfStates.toDouble + 1) / log(2)).toInt
-      //  println(s"log(numberOfStates.toDouble + 1): ${log(numberOfStates.toDouble + 1)}")
       //  println(s"numberOfStates: $numberOfStates, stateBits: $stateBits")
     }
 

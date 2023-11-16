@@ -10,7 +10,7 @@ private[chiseltest] trait ModelCheckResult {
   def isSuccess: Boolean = !isFail
 }
 private[chiseltest] case class ModelCheckSuccess() extends ModelCheckResult { override def isFail: Boolean = false }
-private[chiseltest] case class ModelCheckProve() extends ModelCheckResult {override def isFail: Boolean = false }
+private[chiseltest] case class ModelCheckProve(pNum: Int) extends ModelCheckResult {override def isFail: Boolean = false }
 
 private[chiseltest] case class ModelCheckFail(witness: Witness) extends ModelCheckResult {
   override def isFail: Boolean = true

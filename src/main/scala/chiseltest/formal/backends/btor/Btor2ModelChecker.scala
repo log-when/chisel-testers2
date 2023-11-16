@@ -57,7 +57,7 @@ class PonoModelChecker(targetDir: os.Path) extends IsModelChecker
     // execute model checker
     val kmaxOpt = if (kMax > 0) Seq("-e","bmc","-k", kMax.toString, "--witness") else Seq()
     val cmd = Seq("pono") ++ kmaxOpt ++ Seq(filename)
-    println(cmd)
+    // println(s"cmd: $cmd")
     val r = os.proc(cmd).call(cwd = targetDir, check = false)
 
     // write stdout to file for debugging
@@ -69,7 +69,7 @@ class PonoModelChecker(targetDir: os.Path) extends IsModelChecker
     val isSat = res.nonEmpty && res.head.trim.startsWith("sat")
 
     val isSatNoWit = res.nonEmpty && res.head.trim.startsWith("IC3")
-    println(s"isSatNoWit: $isSatNoWit")
+    // println(s"isSatNoWit: $isSatNoWit")
     if (isSat) {
       val witness = Btor2WitnessParser.read(res, 1).head
       ModelCheckFail(Btor2ModelChecker.convertWitness(sys, witness))
@@ -124,7 +124,7 @@ object PonoModelChecker
       // Seq("-k", kMax.toString, "--witness") else Seq()
     val cmd = Seq("pono") ++ kmaxOpt ++ Seq(filename)
     
-    println(cmd)
+    // println(s"cmd: $cmd")
     val r = os.proc(cmd).call(cwd = targetDir, check = false)
 
     // write stdout to file for debugging
@@ -136,13 +136,13 @@ object PonoModelChecker
     val isSat = res.nonEmpty && res.head.trim.startsWith("sat")
     val isUnSat = res.nonEmpty && res.head.trim.startsWith("unsat")
     val isSatNoWit = res.nonEmpty && res.head.trim.startsWith("IC3")
-    println(s"isSatNoWit: $isSatNoWit")
+    // println(s"isSatNoWit: $isSatNoWit")
 
     if (isSat) {
       val witness = Btor2WitnessParser.read(res, 1).head
       ModelCheckFail(Btor2ModelChecker.convertWitness(sys, witness))
     } else if (isUnSat) {
-      ModelCheckProve()
+      ModelCheckProve(badNum)
     } else if(isSatNoWit){
       ModelCheckFailNoWit()
     } else {
