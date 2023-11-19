@@ -309,7 +309,7 @@ class cha_tree(o:Object) extends JavaTokenParsers {
   )
   def prop4: Parser[cha_pro] =
   (
-      prop3~"U"~prop6               ^^ {case ~(~(p1,o),p2) => println(s"prop4: ${p1}, ${p2}"); until_prop(p1,p2)}
+      prop3~"U"~prop6               ^^ {case ~(~(p1,o),p2) =>  until_prop(p1,p2)}
     | prop3~"->"~prop6              ^^ {case ~(~(p1,o),p2) =>  impl_prop(p1,p2)}
     | prop3                         ^^ {case p:cha_pro =>  p}
   )
