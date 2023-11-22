@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-organization := "edu.berkeley.cs"
+organization := "cn.ac.ios.tis"
 name := "chiseltest"
 
 version := "0.7-SNAPSHOT"
