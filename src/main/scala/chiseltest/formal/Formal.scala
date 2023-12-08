@@ -20,6 +20,8 @@ case class KInductionCheck(kMax: Int = -1) extends FormalOp
 // IC3SA in pono can't generate witness, only work when properties can be proven... 
 case class Ic3SaCheck(kMax: Int = -1) extends FormalOp
 
+case class EnSafetyOpti() extends NoTargetAnnotation
+
 /** Specifies how many cycles the circuit should be reset for. */
 case class ResetOption(cycles: Int = 1) extends NoTargetAnnotation {
   require(cycles >= 0, "The number of cycles must not be negative!")
