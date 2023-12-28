@@ -124,7 +124,7 @@ private[chiseltest] class TransitionSystemSimulator(
           {
             if(stateNameMap.contains(s.name) && s.name!="_resetCount")
             {
-              // println(s"s_name, s_width: ${s.name}, ${s.width}")
+              // println(s"s_name, map_name, s_width: ${s.name}, ${stateNameMap(s.name)}, ${s.width}")
               vv.addWire(stateNameMap(s.name), s.width)
             }
             else if(inputNameMap.contains(s.name))
@@ -208,7 +208,7 @@ private[chiseltest] class TransitionSystemSimulator(
         bvStates.foreach { state => 
           // if(stateNameMap.exists(_._1 == state.name))
             // v.wireChanged(stateNameMap(state.name), data(bvNameToIndex(state.name))) }
-        v.wireChanged(state.name, data(bvNameToIndex(state.name))) }
+        v.wireChanged(stateNameMap(state.name), data(bvNameToIndex(state.name))) }
       }
       else
       {

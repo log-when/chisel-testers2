@@ -96,7 +96,8 @@ class PonoModelChecker(targetDir: os.Path) extends IsModelChecker
         badNu:Int =>
         {
           result = PonoModelChecker.checkProperty(targetDir, filename,sys, kMax, algor, badNu)
-          if(result.isInstanceOf[ModelCheckFail])
+          // println(s"badNu, result: $badNum, ${result}")
+          if(result.isInstanceOf[ModelCheckFail] || result.isInstanceOf[ModelCheckFailNoWit])
             break()
         }
       }
@@ -142,6 +143,7 @@ object PonoModelChecker
       val witness = Btor2WitnessParser.read(res, 1).head
       ModelCheckFail(Btor2ModelChecker.convertWitness(sys, witness))
     } else if (isUnSat) {
+      println(s"Property $badNum can be proven!")
       ModelCheckProve(badNum)
     } else if(isSatNoWit){
       ModelCheckFailNoWit()

@@ -133,7 +133,7 @@ private[chiseltest] object Maltese {
       
       case ModelCheckFailNoWit() => throw FailedBoundedCheckException(circuit.main, -1)
       case ModelCheckSuccess() => // good!
-      case ModelCheckProve(badNum) => println(s"Property $badNum can be proven!")
+      case ModelCheckProve(badNum) => // good!
     }
   }
 
