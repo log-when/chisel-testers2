@@ -162,6 +162,11 @@ case class constantFalse() extends cha_seq with chaElementAnno
   override def toSVA(f: Target => Expression): Seq[Any] = Seq("0")
 }
 case class atom_prop_node(signal:Bool) extends cha_seq
+{
+  def unary_! : atom_prop_node = {
+    atom_prop_node(!signal)
+  }
+}
 case class atom_prop_anno(signal:ReferenceTarget) extends cha_seq with chaElementAnno
 {
   override def toPSL(rename2p: Map[Target,String]): String = rename2p(signal) 
@@ -288,7 +293,8 @@ trait targetAnno extends cha_node
 case class ResetAnno(target:Target) extends targetAnno
 case class EnableAnno(target:Target) extends targetAnno
 case class ClockAnno(target:Target) extends targetAnno
-case class ModuleAnno(target:Target) extends targetAnno
+case class ModAnno(target:Target) extends targetAnno
+case class InitialAssertion() extends cha_node
 
 class cha_tree(o:Object) extends JavaTokenParsers {
   def prop: Parser[cha_pro] = 
@@ -326,12 +332,12 @@ class cha_tree(o:Object) extends JavaTokenParsers {
   )
   def prop1: Parser[cha_pro] = 
   (
-      "!"~>prop1 ^^ {case p:cha_pro => not_prop(p)}  
+      seq       ^^ {case s:cha_seq => prompt_prop(s)}
+    |  "!"~>prop1 ^^ {case p:cha_pro => not_prop(p)}  
     | "X"~>prop1 ^^ {case p:cha_pro => next_prop(p)}
-    | seq       ^^ {case s:cha_seq => prompt_prop(s)}
     | "("~>prop<~")" ^^{case p:cha_pro => p}
-    // |  "!"~>prop ^^ {case p:cha_pro => not_prop(p)}  
-    // | "X"~>prop ^^ {case p:cha_pro => next_prop(p)}
+    |  "!"~>prop ^^ {case p:cha_pro => not_prop(p)}  
+    |  "X"~>prop ^^ {case p:cha_pro => next_prop(p)}
     // | "G"~>prop ^^ {case p:cha_pro => glo_prop(p)}
   )
 
@@ -374,6 +380,8 @@ class cha_tree(o:Object) extends JavaTokenParsers {
   (
       atom_prop~opt(repe_range)     ^^ {case ~(ap,Some(r)) => repe_seq(r.lowerBound,r.upperBound,ap)
                                       case ~(ap,None)    => ap}
+    | "!"~>atom_prop~opt(repe_range)^^ {case ~(ap,Some(r)) => repe_seq(r.lowerBound,r.upperBound,!ap)
+                                      case ~(ap,None)    => !ap}                                
     | "("~>seq~")"~opt(repe_range)  ^^ {case ~(~(seq,")"),Some(r)) => repe_seq(r.lowerBound,r.upperBound,seq)
                                       case ~(~(seq,")"),None) => seq
                                       case _ => new atom_prop_node(false.asBool)}
@@ -418,7 +426,7 @@ case object chaAssumeStmt extends chaStmt
 
 object chaAnno
 {
-  def chaAssert(o:Object, s:String) =
+  def chaAssert(o:Object, s:String, isInitial:Boolean = false) =
   {
     val res = o.asInstanceOf[Module].reset
     val en = !res.asBool
@@ -444,8 +452,12 @@ object chaAnno
           case otherOp: chaElementAnno => Seq(otherOp)
         } 
         // println(s"chaAnnotation: ${chaanotation.toSeq}")
-        new chaAssertAnno(chaanotation:+Seq(ResetAnno(res.toTarget)):+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
-        // new chaAnno(chaanotation:+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
+        val commonAttached = Seq(Seq(ResetAnno(res.toTarget)),Seq(ClockAnno(clo.toTarget)), Seq(ModAnno(mod.toTarget)), Seq(EnableAnno(en.toTarget)))
+        val attachedAnnos = 
+          if(!isInitial) commonAttached
+          else commonAttached :+ Seq(InitialAssertion())
+        new chaAssertAnno(chaanotation ++ attachedAnnos)
+        // new chaAnno(chaanotation:+Seq(ClockAnno(clo.toTarget)):+Seq(ModAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
       }
     })
   }
@@ -474,7 +486,7 @@ object chaAnno
           case atom_prop_node(ap) => Seq(atom_prop_anno(ap.toTarget))
           case otherOp: chaElementAnno => Seq(otherOp)
         } 
-        new chaAssumeAnno(chaanotation:+Seq(ResetAnno(res.toTarget)):+Seq(ClockAnno(clo.toTarget)):+Seq(ModuleAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
+        new chaAssumeAnno(chaanotation:+Seq(ResetAnno(res.toTarget)):+Seq(ClockAnno(clo.toTarget)):+Seq(ModAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
       }
     })
   }
@@ -495,20 +507,23 @@ object chaAnno
     // println(s"elementCHA: $elementCHA")
     val resetAn = elementCHA.filter(_.isInstanceOf[ResetAnno])
     // assert(resetAn.size == 1,"only allow one reset signal")
-
-    val remainCHA = elementCHA.filter(!_.isInstanceOf[targetAnno])
+    val isInitial = elementCHA.exists(_.isInstanceOf[InitialAssertion])
+    
+    val remainCHA = elementCHA.filter{x => (!x.isInstanceOf[targetAnno] && !x.isInstanceOf[InitialAssertion])}
     // println(s"remainCHA: $remainCHA")
     val target2p = chaAnno.generateMap2p(remainCHA)
     val p2target = target2p.toSeq.map{case Tuple2(k,v) => Tuple2(v,k)}.toMap
-    // val seq_ =mutable.Seq(remainCHA:_*)
+
     val deSeri = remainCHA(0).treeDeSerialize(remainCHA.tail)
     // println(s"deserialization: ${deSeri}")
 
     // distinguish assert with assume, assert statement need to be negated
     val isAssert = s.isInstanceOf[chaAssertAnno]
     val neg = if (isAssert) "! " else ""
-    val psl = neg +"G(" + deSeri._1.asInstanceOf[chaElementAnno].toPSL(target2p) + ") "
-
+    val initial =  if(!isInitial) "G " else "" 
+    val psl = neg + initial + "(" + deSeri._1.asInstanceOf[chaElementAnno].toPSL(target2p) + ") "
+    // val psl = neg  + deSeri._1.asInstanceOf[chaElementAnno].toPSL(target2p)
+    println(s"psl: $psl")
     //val psl = "!" + chaAnno.toPSL(syntaxTree,target2p)
     // println(s"psl: $psl")
     // println(s"$p2target")
@@ -552,7 +567,7 @@ trait chaAnno extends MultiTargetAnnotation{
         case ResetAnno(target) => renames(target).map{ResetAnno(_)}
         case ClockAnno(target) => {renames(target).map{ClockAnno(_)}}
         case EnableAnno(target) => renames(target).map{EnableAnno(_)}
-        case ModuleAnno(target) => renames(target).map{ModuleAnno(_)}
+        case ModAnno(target) => renames(target).map{ModAnno(_)}
         case a => Seq(a)
       }
   )))
