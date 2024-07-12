@@ -1,3 +1,4 @@
+// added in cha, use BDD as the intermediate to store the boolean formulae in transition system
 package chiseltest.formal
 
 import jhoafparser.ast.Atom

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-
+// modified in cha: to enable more model checking backends and algorithms
 package chiseltest.formal
 
 import chisel3.Module

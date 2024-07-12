@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Author: Kevin Laeufer <laeufer@cs.berkeley.edu>
+// modified in cha: handle the aux vars added in L2S
 package chiseltest.formal.backends
 
 import treadle2.vcd
@@ -16,13 +17,11 @@ private[chiseltest] class TransitionSystemSimulator(
   val maxMemVcdSize: Int = 128,
   printUpdates:      Boolean = false) {
   
-  //- be catious! is it allowed to use cha and otiginal assertion together?
   private val hasCHA = sys.states.count(_.name.slice(0,9) == "assertSta") != 0
   private var loop = false
   private val (bvStates, arrayStates) = sys.states.partition(s => s.sym.isInstanceOf[BVSymbol])
   private val (bvSignals, arraySignals) = sys.signals.partition(s => s.e.isInstanceOf[BVExpr])
 
-  //
   private val allArrays = (arrayStates.map(_.sym) ++ arraySignals.map(_.sym)).map(_.asInstanceOf[ArraySymbol])
   private val allBV = (sys.inputs ++ bvStates.map(_.sym) ++ bvSignals.map(_.sym)).map(_.asInstanceOf[BVSymbol])
 
@@ -124,7 +123,6 @@ private[chiseltest] class TransitionSystemSimulator(
           {
             if(stateNameMap.contains(s.name) && s.name!="_resetCount")
             {
-              // println(s"s_name, map_name, s_width: ${s.name}, ${stateNameMap(s.name)}, ${s.width}")
               vv.addWire(stateNameMap(s.name), s.width)
             }
             else if(inputNameMap.contains(s.name))
@@ -134,7 +132,7 @@ private[chiseltest] class TransitionSystemSimulator(
           })
           if(triggerJustice)
           {
-            println("with loop?")
+            // println("with loop?")
             vv.addWire("loop",1)
           }
         }
@@ -221,7 +219,7 @@ private[chiseltest] class TransitionSystemSimulator(
       }
     }
 
-    // apply inputs, it seems that the witness of inputs should not be array
+    // apply inputs
     sys.inputs.zipWithIndex.foreach { case (input, ii) =>
       val value = inputs(ii)
       data(ii) = value
@@ -233,16 +231,6 @@ private[chiseltest] class TransitionSystemSimulator(
         else
           v.wireChanged(input.name, value)
       }
-      // if(hasCHA)
-      // {
-      //   if(inputNameMap.exists(_._1 == input.name))
-      //     println(s"what? ${inputNameMap(input.name)}; ${value}")
-      //     vcdWriter.foreach(_.wireChanged(inputNameMap(input.name), value))
-      // }
-      // else
-      // {
-      //   vcdWriter.foreach(_.wireChanged(input.name, value))
-      // }
       if (printUpdates) println(s"I: ${input.name} <- $value")
     }
 
@@ -252,7 +240,7 @@ private[chiseltest] class TransitionSystemSimulator(
         val value = eval(e)
         if (printUpdates) println(s"S: $name -> $value")
         data(bvNameToIndex(name)) = value
-        if(!hasCHA)
+        // if(!hasCHA)
           vcdWriter.foreach(_.wireChanged(name, value))
       case Signal(name, e: ArrayExpr, _) =>
         val value = evalArray(e)
@@ -297,7 +285,7 @@ private[chiseltest] class TransitionSystemSimulator(
       .map(_._1)
     def failedMsg(name: String): String = {
       val expr = simpl(sys.signals.find(_.name == name).get.e)
-      //val syms = symbolsToString(Context.findSymbols(expr)).mkString(", ")
+      // val syms = symbolsToString(Context.findSymbols(expr)).mkString(", ")
       s"$name: $expr"
     }
     def failedPropertiesMsg: String =
@@ -332,7 +320,6 @@ private[chiseltest] class TransitionSystemSimulator(
   }
 
   def run(witness: Witness, vcdFileName: Option[String] = None): Unit = {
-
     init(witness.regInit, witness.memInit, withVcd = vcdFileName.nonEmpty)
     
     val badString = witness.failed(0)
@@ -349,8 +336,8 @@ private[chiseltest] class TransitionSystemSimulator(
       }
     }
     vcdFileName.foreach { ff =>
-      // println(s"ff: $ff")
       val vv = vcdWriter.get
+      println(s"vv: $vv")
       vv.wireChanged("Step", witness.inputs.size)
       vv.incrementTime()
       vv.write(ff)

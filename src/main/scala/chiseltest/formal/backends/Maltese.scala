@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-
+// modified in cha: handle the aux vars added in L2S
 package chiseltest.formal.backends
 
 import chiseltest.formal._
@@ -91,11 +91,9 @@ private[chiseltest] object Maltese {
       case ModelCheckFail(witness) =>
         val writeVcd = annos.contains(WriteVcdAnnotation)
         if (writeVcd) {
-
           val hasCHA = !noCHA(sysInfo.sys)
-
           // println(s"hasCHA: ${hasCHA}")
-          // violated safety property is from assertion, try to simulate
+          // if there is no cha, the simulation is from original one
           if(!hasCHA)
           {
             val sim = new TransitionSystemSimulator(sysInfo.sys)
@@ -126,6 +124,10 @@ private[chiseltest] object Maltese {
 
             val sim = new TransitionSystemSimulator(sysInfo.sys, inputNameMap, stateNameMap, triggerJustice)
             sim.run(witness, vcdFileName = Some((targetDir / s"${circuit.main}.bmc.vcd").toString))
+            val trace = witnessToTrace(sysInfo, witness)
+            val treadleState = prepTreadle(circuit, annos, modelUndef)
+            val treadleDut = TreadleBackendAnnotation.getSimulator.createContext(treadleState)
+            Trace.replayOnSim(trace, treadleDut)
           }
         }
         val failSteps = witness.inputs.length - 1 - resetLength
@@ -178,8 +180,6 @@ private[chiseltest] object Maltese {
   private def toTransitionSystem(circuit: ir.Circuit, annos: AnnotationSeq): SysInfo = {
 
     val logLevel = Seq() // Seq("-ll", "info")
-    // use other way instead of removing DeadCodeElimination
-    
     val opts: AnnotationSeq = if (annos.contains(DoNotOptimizeFormal)) Seq() else Optimizations
     //SMTEmitter depends on FirrtlToTransitionSystem transform 
     val res = firrtlPhase.transform(
@@ -254,9 +254,9 @@ private[chiseltest] object Maltese {
       .toIndexedSeq
 
     Trace(
-      inputs = w.inputs.map(_.toSeq.map { case (i, value) => inputNames(i) -> value }),
-      regInit = w.regInit.toSeq.map { case (i, value) => stateNames(i) -> value },
-      memInit = w.memInit.toSeq.map { case (i, values) =>
+      inputs = w.inputs.map(_.toSeq.filter{case (i,_) => sysInfo.sys.inputs.contains(i)}.map { case (i, value) => inputNames(i) -> value }),
+      regInit = w.regInit.toSeq.filter{case (i,_) => sysInfo.sys.states.contains(i)}.map { case (i, value) => stateNames(i) -> value },
+      memInit = w.memInit.toSeq.filter{case (i,_) => sysInfo.sys.states.contains(i)}.map { case (i, values) =>
         val name = stateNames(i)
         name -> expandMemWrites(sysInfo.memDepths(name), values)
       }

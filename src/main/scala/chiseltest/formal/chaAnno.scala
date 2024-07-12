@@ -1,3 +1,4 @@
+// added in cha: define chaAssertion and parse 
 // important: solve problems casued by extra clock information and module information...
 // important: reconsider the semantics of reset: G (!reset -> p)
 package chiseltest.formal
@@ -526,7 +527,6 @@ object chaAnno
     println(s"psl: $psl")
     //val psl = "!" + chaAnno.toPSL(syntaxTree,target2p)
     // println(s"psl: $psl")
-    // println(s"$p2target")
     val stmt = if (isAssert) chaAssertStmt else chaAssumeStmt
     (psl,p2target,resetAn(0).asInstanceOf[ResetAnno].target,stmt)
   }

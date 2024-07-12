@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Author: Kevin Laeufer <laeufer@cs.berkeley.edu>
+// modified in cha: more verification result types
 package chiseltest.formal.backends
 
 import firrtl.backends.experimental.smt._

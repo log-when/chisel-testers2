@@ -1,3 +1,4 @@
+// added in cha: parse the hoa format Buchi automaton, which is produced by Spot
 package chiseltest.formal
 
 import jhoafparser.ast.AtomAcceptance
@@ -92,10 +93,6 @@ class hoaParser extends HOAConsumer{
         // println(accISBad.toSeq)
         accISBad.foldLeft(true)((a,b)=> a & b)
     }
-
-    // def isDeterministic(): Boolean = {
-
-    // }
 
     //- old_addAuxVar is collated with old_partialDeterministic
     def old_addAuxVar(): Unit =
