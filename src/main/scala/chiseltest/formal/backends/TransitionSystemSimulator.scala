@@ -17,7 +17,7 @@ private[chiseltest] class TransitionSystemSimulator(
   val maxMemVcdSize: Int = 128,
   printUpdates:      Boolean = false) {
   
-  private val hasCHA = sys.states.count(_.name.slice(0,9) == "assertSta") != 0
+  private val hasCHA = sys.states.count(_.name.slice(0,5) == "atSta") != 0
   private var loop = false
   private val (bvStates, arrayStates) = sys.states.partition(s => s.sym.isInstanceOf[BVSymbol])
   private val (bvSignals, arraySignals) = sys.signals.partition(s => s.e.isInstanceOf[BVExpr])

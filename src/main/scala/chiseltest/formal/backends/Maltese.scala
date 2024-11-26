@@ -14,6 +14,7 @@ import firrtl.backends.experimental.smt._
 import chiseltest.simulator._
 import firrtl.options.Dependency
 
+import scala.util.control.Breaks._
 sealed trait FormalEngineAnnotation extends NoTargetAnnotation
 
 /** Use a SMTLib based model checker with the CVC4 SMT solver.
@@ -67,7 +68,24 @@ private[chiseltest] object Maltese {
     val modelUndef = !annos.contains(DoNotModelUndef)
     val sysAnnos: AnnotationSeq = if (modelUndef) { DefRandomAnnos ++: annos }
     else { annos }
-    val sysInfo = toTransitionSystem(circuit, sysAnnos)
+
+    val preSysInfo = toTransitionSystem(circuit, sysAnnos)
+    val stateMap = preSysInfo.stateMap
+    val preSys = preSysInfo.sys
+    val preInputs = preSys.inputs.filter(x => x.name.slice(0,2)!="cv" && x.name.slice(0,5)!="eq_cv" || stateMap.contains(x.name))
+    val preStates = preSys.states.filter(x => x.name.slice(0,2)!="cv" && x.name.slice(0,5)!="eq_cv" || stateMap.contains(x.name))
+    val preSignals = preSys.signals.filter(x => x.name.slice(0,2)!="cv" && x.name.slice(0,5)!="eq_cv" || stateMap.contains(x.name))
+
+    val newSys = preSys.copy(inputs=preInputs, states=preStates, signals=preSignals)
+    val sysInfo = preSysInfo.copy(sys=newSys)
+
+    if (true) {
+      val targetDir = Compiler.requireTargetDir(annos)
+      os.write.over(targetDir / s"${circuit.main}WithoutCover.sys", newSys.serialize)
+    }
+
+    if (annos.contains(GenTsOnly))
+      return 
 
     // if the system has no bad states => success!
     if (noBadStates(sysInfo.sys)) {
@@ -87,58 +105,157 @@ private[chiseltest] object Maltese {
     }
     assert(!proveAlgor | proveChecker, s"${checkers.head.name} can't prove property!")
 
-    checkers.head.check(sysInfo.sys, kMax = kMax + resetLength, algor) match {
-      case ModelCheckFail(witness) =>
-        val writeVcd = annos.contains(WriteVcdAnnotation)
-        if (writeVcd) {
-          val hasCHA = !noCHA(sysInfo.sys)
-          // println(s"hasCHA: ${hasCHA}")
-          // if there is no cha, the simulation is from original one
-          if(!hasCHA)
-          {
-            val sim = new TransitionSystemSimulator(sysInfo.sys)
-            sim.run(witness, vcdFileName = Some((targetDir / s"${circuit.main}.bmc.vcd").toString))
-            val trace = witnessToTrace(sysInfo, witness)
-            val treadleState = prepTreadle(circuit, annos, modelUndef)
-            val treadleDut = TreadleBackendAnnotation.getSimulator.createContext(treadleState)
-            Trace.replayOnSim(trace, treadleDut)
-          }
-          // if the violated safety property is from extended SVA-like assertion
-          // don't simulate, only output the lasso-shaped trace 
-          else
-          {
-            val inputNameMap = sysInfo.sys.inputs.map(_.name).map(name => name -> sysInfo.stateMap.getOrElse(name, name)).toMap
-            // println(s"inputNameMap: ${inputNameMap}")
-            //- show aux state temporarily
-            val stateNameMap = sysInfo.sys.states.map(_.name).map(name => name -> {
-                sysInfo.stateMap.getOrElse(name, name)
-            }).toMap 
+    
+    val badNum = sysInfo.sys.signals.count(_.lbl == IsBad)
+    val badSeq = Seq.range(0, badNum ,1)
+    breakable
+    {
+      badSeq.foreach{
+        badNu:Int => 
+        checkers.head.check(sysInfo.sys, kMax = kMax + resetLength, algor = algor, nthProp = badNu, checkCover = false) match {
+          case ModelCheckFail(witness) =>
+            val writeVcd = annos.contains(WriteVcdAnnotation)
+            if (writeVcd) {
+              val hasCHA = !noCHA(sysInfo.sys)
+              // println(s"hasCHA: ${hasCHA}")
+              // if there is no cha, the simulation is from original one
+              if(!hasCHA)
+              {
+                val sim = new TransitionSystemSimulator(sysInfo.sys)
+                sim.run(witness, vcdFileName = Some((targetDir / s"${circuit.main}.bmc.vcd").toString))
+                val trace = witnessToTrace(sysInfo, witness)
+                val treadleState = prepTreadle(circuit, annos, modelUndef)
+                val treadleDut = TreadleBackendAnnotation.getSimulator.createContext(treadleState)
+                Trace.replayOnSim(trace, treadleDut)
+              }
+              // if the violated safety property is from extended SVA-like assertion
+              // don't simulate, only output the lasso-shaped trace 
+              else
+              {
+                val inputNameMap = sysInfo.sys.inputs.map(_.name).map(name => name -> sysInfo.stateMap.getOrElse(name, name)).toMap
+                // println(s"inputNameMap: ${inputNameMap}")
+                //- show aux state temporarily
+                val stateNameMap = sysInfo.sys.states.map(_.name).map(name => name -> {
+                    sysInfo.stateMap.getOrElse(name, name)
+                }).toMap 
 
-            // println(s"states: ${sysInfo.sys.states}")
-            // println(s"stateNameMap: ${stateNameMap}")
-            // to be optimized
-            // if triggered property is not liveness property, aux state variable can be hidden
-            val badString = witness.failed(0)
-            val triggerJustice = triggerJust(badString)
-            // println(s"triggerJustice: ${triggerJustice}")
+                // println(s"states: ${sysInfo.sys.states}")
+                // println(s"stateNameMap: ${stateNameMap}")
+                // to be optimized
+                // if triggered property is not liveness property, aux state variable can be hidden
+                val badString = witness.failed(0)
+                val triggerJustice = triggerJust(badString)
+                // println(s"triggerJustice: ${triggerJustice}")
 
-            val sim = new TransitionSystemSimulator(sysInfo.sys, inputNameMap, stateNameMap, triggerJustice)
-            sim.run(witness, vcdFileName = Some((targetDir / s"${circuit.main}.bmc.vcd").toString))
-            val trace = witnessToTrace(sysInfo, witness)
-            val treadleState = prepTreadle(circuit, annos, modelUndef)
-            val treadleDut = TreadleBackendAnnotation.getSimulator.createContext(treadleState)
-            Trace.replayOnSim(trace, treadleDut)
-          }
+                val sim = new TransitionSystemSimulator(sysInfo.sys, inputNameMap, stateNameMap, triggerJustice)
+                sim.run(witness, vcdFileName = Some((targetDir / s"${circuit.main}.bmc.vcd").toString))
+                val trace = witnessToTrace(sysInfo, witness)
+                val treadleState = prepTreadle(circuit, annos, modelUndef)
+                val treadleDut = TreadleBackendAnnotation.getSimulator.createContext(treadleState)
+                Trace.replayOnSim(trace, treadleDut)
+              }
+            }
+            val failSteps = witness.inputs.length - 1 - resetLength
+            throw FailedBoundedCheckException(circuit.main, failSteps)
+          
+          case ModelCheckFailNoWit() => throw FailedBoundedCheckException(circuit.main, -1)
+          case ModelCheckSuccess() => // good!
+          case ModelCheckProve(badNum) => // good!
         }
-        val failSteps = witness.inputs.length - 1 - resetLength
-        throw FailedBoundedCheckException(circuit.main, failSteps)
-      
-      case ModelCheckFailNoWit() => throw FailedBoundedCheckException(circuit.main, -1)
-      case ModelCheckSuccess() => // good!
-      case ModelCheckProve(badNum) => // good!
+      }
     }
   }
 
+  def bmcCover(circuit: ir.Circuit, annos: AnnotationSeq, kMax: Int, resetLength: Int = 0, algor: FormalOp = BoundedCheck()): Unit = {
+    
+    require(kMax > 0)
+    require(resetLength >= 0)
+
+    // convert to transition system
+    val targetDir = Compiler.requireTargetDir(annos)
+    val modelUndef = !annos.contains(DoNotModelUndef)
+    val sysAnnos: AnnotationSeq = if (modelUndef) { DefRandomAnnos ++: annos }
+    else { annos }
+    val preSysInfo = toTransitionSystem(circuit, sysAnnos)
+    val stateMap = preSysInfo.stateMap
+    val preSys = preSysInfo.sys
+    val preInputs = preSys.inputs.filter(x => (x.name.slice(0,2)!="at" && x.name.slice(0,5)!="eq_at") || stateMap.contains(x.name))
+    val preStates = preSys.states.filter(x => (x.name.slice(0,2)!="at" && x.name.slice(0,5)!="eq_at") || stateMap.contains(x.name))
+    val preSignals = preSys.signals.filter(x => (x.name.slice(0,2)!="at" && x.name.slice(0,5)!="eq_at") || stateMap.contains(x.name))
+
+    val newSys = preSys.copy(inputs=preInputs, states=preStates, signals=preSignals)
+    val sysInfo = preSysInfo.copy(sys=newSys)
+
+    if (true) {
+      val targetDir = Compiler.requireTargetDir(annos)
+      os.write.over(targetDir / s"${circuit.main}WithoutAssert.sys", newSys.serialize)
+    }
+    // if the system has no bad states => success!
+    if (noBadStates(sysInfo.sys)) {
+      return // proven correct by the compiler!
+    }
+
+    // perform check
+    val checkers = makeCheckers(annos, targetDir)
+    assert(checkers.size == 1, "Parallel checking not supported atm!")
+    assert(checkers(0).isInstanceOf[PonoModelChecker], "Coverage checking is supported only with pono atm!")
+    assert(algor.isInstanceOf[BoundedCheck], "Coverage checking is supported only by bmc atm!")
+
+    val badNum = sysInfo.sys.signals.count(_.lbl == IsBad)
+    val badSeq = Seq.range(0, badNum ,1)
+    breakable
+    {
+      badSeq.foreach{
+        badNu:Int => 
+        checkers.head.check(sysInfo.sys, kMax = kMax + resetLength, algor, badNu, true) match {
+          case ModelCheckFail(witness) =>
+            val writeVcd = annos.contains(WriteVcdAnnotation)
+            if (writeVcd) {
+              val hasCHA = !noCHA(sysInfo.sys)
+              // println(s"hasCHA: ${hasCHA}")
+              // if there is no cha, the simulation is from original one
+              if(!hasCHA)
+              {
+                // no cover is checked
+                return
+              }
+              // if the violated safety property is from extended SVA-like assertion
+              // don't simulate, only output the lasso-shaped trace 
+              else
+              {
+                val inputNameMap = sysInfo.sys.inputs.map(_.name).map(name => name -> sysInfo.stateMap.getOrElse(name, name)).toMap
+                // println(s"inputNameMap: ${inputNameMap}")
+                //- show aux state temporarily
+                val stateNameMap = sysInfo.sys.states.map(_.name).map(name => name -> {
+                    sysInfo.stateMap.getOrElse(name, name)
+                }).toMap 
+
+                val badString = witness.failed(0)
+                val triggerJustice = triggerJust(badString)
+
+                val sim = new TransitionSystemSimulator(sysInfo.sys, inputNameMap, stateNameMap, triggerJustice)
+                sim.run(witness, vcdFileName = Some((targetDir / s"${circuit.main}.bmc.vcd").toString))
+                val trace = witnessToTrace(sysInfo, witness)
+                val aannos = AnnotationSeq(annos.toSeq.filter(!_.isInstanceOf[OutputFileAnnotation]) :+ OutputFileAnnotation(circuit.main + "_cover_" + badString.slice(5,6)))            
+                val treadleState = prepTreadle(circuit, aannos, modelUndef)
+                val treadleDut = TreadleBackendAnnotation.getSimulator.createContext(treadleState)
+                Trace.replayOnSim(trace, treadleDut)
+                val failSteps = witness.inputs.length - 1 - resetLength
+                val meetCover = badString.slice(5,6)
+                println(s"the $meetCover th cover statement in [${circuit.main}] is satisfied $failSteps steps after reset")
+              }
+            }
+            
+          case ModelCheckFailNoWit() => // 
+          case ModelCheckSuccess() =>                 
+            println(s"the $badNu th cover statement in [${circuit.main}] can not be satisfied within $kMax steps after reset")
+
+          case ModelCheckProve(badNum) => // good!
+        }
+      }
+    }
+  }
+  
   // compile low firrtl circuit into a version with all DefRandom registers so that treadle can use it to replay the
   // counter example
   private def prepTreadle(circuit: ir.Circuit, annos: AnnotationSeq, modelUndef: Boolean): CircuitState = {
@@ -207,7 +324,9 @@ private[chiseltest] object Maltese {
     sys.signals.count(_.lbl == IsBad) == 0
 
   private def noCHA(sys: TransitionSystem): Boolean =
-    sys.states.count(_.name.slice(0,9) == "assertSta") == 0 && sys.states.count(_.name.slice(0,9) == "assumeSta") == 0
+    sys.states.count(_.name.slice(0,5) == "atSta") == 0 && 
+    sys.states.count(_.name.slice(0,5) == "amSta") == 0 && 
+    sys.states.count(_.name.slice(0,5) == "cvSta") == 0
 
   private def triggerJust(badString: String): Boolean =
     badString.slice(0,8) == "just2Bad"
@@ -253,10 +372,20 @@ private[chiseltest] object Maltese {
       .map(name => sysInfo.stateMap.getOrElse(name, name))
       .toIndexedSeq
 
+    // println(s"inputNames: $inputNames")
+    // val aa = w.inputs.map(_.toSeq.map { case (i, value) => inputNames(i) -> value })
+    // val bb = w.inputs.map(_.toSeq.filter{case (i,_) => sysInfo.sys.inputs.map(_.name).contains(inputNames(i))}.map { case (i, value) => inputNames(i) -> value })
+    // println(s"aa: $aa")
+    // println(s"bb: $bb")
+
     Trace(
-      inputs = w.inputs.map(_.toSeq.filter{case (i,_) => sysInfo.sys.inputs.contains(i)}.map { case (i, value) => inputNames(i) -> value }),
-      regInit = w.regInit.toSeq.filter{case (i,_) => sysInfo.sys.states.contains(i)}.map { case (i, value) => stateNames(i) -> value },
-      memInit = w.memInit.toSeq.filter{case (i,_) => sysInfo.sys.states.contains(i)}.map { case (i, values) =>
+      inputs = w.inputs.map(_.toSeq.filter{case (i,_) => 
+      inputNames(i).slice(0,8) != "extInput" &&
+      // println(s"i: $i, ${inputNames(i)}")
+      sysInfo.sys.inputs.map(_.name).contains(inputNames(i))
+      }.map { case (i, value) => inputNames(i) -> value }),
+      regInit = w.regInit.toSeq.filter{case (i,_) => sysInfo.sys.states.map(_.name).contains(i)}.map { case (i, value) => stateNames(i) -> value },
+      memInit = w.memInit.toSeq.filter{case (i,_) => sysInfo.sys.states.map(_.name).contains(i)}.map { case (i, values) =>
         val name = stateNames(i)
         name -> expandMemWrites(sysInfo.memDepths(name), values)
       }

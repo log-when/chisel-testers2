@@ -26,7 +26,7 @@ private[chiseltest] trait IsModelChecker {
   val fileExtension: String
   def check(sys: TransitionSystem, kMax: Int = -1): ModelCheckResult
   // Scala disallows overloaded methods with default arguments
-  def check(sys: TransitionSystem, kMax: Int, algor:FormalOp): ModelCheckResult = check(sys, kMax)
+  def check(sys: TransitionSystem, kMax: Int, algor:FormalOp, nthProp:Int, checkCover: Boolean): ModelCheckResult = check(sys, kMax)
 }
 
 private[chiseltest] case class Witness(

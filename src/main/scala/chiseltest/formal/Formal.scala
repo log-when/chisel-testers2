@@ -21,6 +21,7 @@ case class KInductionCheck(kMax: Int = -1) extends FormalOp
 case class Ic3SaCheck(kMax: Int = -1) extends FormalOp
 
 case object  EnSafetyOpti extends NoTargetAnnotation
+case object GenTsOnly extends NoTargetAnnotation
 
 /** Specifies how many cycles the circuit should be reset for. */
 case class ResetOption(cycles: Int = 1) extends NoTargetAnnotation {
@@ -88,6 +89,7 @@ private object Formal {
     // add kInduction engine, it only works when taking pono as the backend
     // since it only changes the command parameters of calling pono, bmc method is still used 
     case BoundedCheck(kMax) =>
+      backends.Maltese.bmcCover(state.circuit, state.annotations, kMax = kMax, resetLength = resetLength)
       backends.Maltese.bmc(state.circuit, state.annotations, kMax = kMax, resetLength = resetLength)
     case KInductionCheck(kMax) => 
       backends.Maltese.bmc(state.circuit, state.annotations, kMax = kMax, resetLength = resetLength, KInductionCheck(kMax))

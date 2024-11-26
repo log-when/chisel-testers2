@@ -6,7 +6,7 @@ import chiseltest.formal.backends._
 import firrtl.backends.experimental.smt._
 import chiseltest.formal.{FormalOp, BoundedCheck, KInductionCheck, Ic3SaCheck}
 
-import scala.util.control.Breaks._
+
 class BtormcModelChecker(targetDir: os.Path) extends IsModelChecker {
   override val fileExtension = ".btor2"
   override val name:   String = "btormc"
@@ -80,29 +80,13 @@ class PonoModelChecker(targetDir: os.Path) extends IsModelChecker
     }
   }
 
-  override def check(sys: TransitionSystem, kMax: Int, algor: FormalOp): ModelCheckResult = {
+  override def check(sys: TransitionSystem, kMax: Int, algor: FormalOp, nthProp:Int, checkCover: Boolean): ModelCheckResult = {
     val filename = sys.name + ".btor"
     // btromc isn't happy if we include output nodes, so we skip them during serialization
     val lines = Btor2Serializer.serialize(sys, skipOutput = true)
     os.write.over(targetDir / filename, lines.mkString("", "\n", "\n"))
 
-    // execute model checker
-    val badNum = sys.signals.count(_.lbl == IsBad)
-    val badSeq = Seq.range(0, badNum ,1)
-    var result: ModelCheckResult = ModelCheckSuccess()
-    breakable
-    {
-      badSeq.foreach{ 
-        badNu:Int =>
-        {
-          result = PonoModelChecker.checkProperty(targetDir, filename,sys, kMax, algor, badNu)
-          // println(s"badNu, result: $badNum, ${result}")
-          if(result.isInstanceOf[ModelCheckFail] || result.isInstanceOf[ModelCheckFailNoWit])
-            break()
-        }
-      }
-    }
-    result
+    PonoModelChecker.checkProperty(targetDir, filename,sys, kMax, algor, nthProp)
   }
 }
 

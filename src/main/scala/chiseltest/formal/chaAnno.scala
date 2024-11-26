@@ -424,6 +424,7 @@ class cha_tree(o:Object) extends JavaTokenParsers {
 trait chaStmt
 case object chaAssertStmt extends chaStmt
 case object chaAssumeStmt extends chaStmt
+case object chaCoverStmt extends chaStmt
 
 object chaAnno
 {
@@ -457,7 +458,9 @@ object chaAnno
         val attachedAnnos = 
           if(!isInitial) commonAttached
           else commonAttached :+ Seq(InitialAssertion())
-        new chaAssertAnno(chaanotation ++ attachedAnnos)
+        val ret = new chaAssertAnno(chaanotation ++ attachedAnnos)
+        println(s"chaAssertStmt: ${chaAnno.CHAAnno2PSL(ret)._1}")
+        ret
         // new chaAnno(chaanotation:+Seq(ClockAnno(clo.toTarget)):+Seq(ModAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
       }
     })
@@ -487,10 +490,52 @@ object chaAnno
           case atom_prop_node(ap) => Seq(atom_prop_anno(ap.toTarget))
           case otherOp: chaElementAnno => Seq(otherOp)
         } 
-        new chaAssumeAnno(chaanotation:+Seq(ResetAnno(res.toTarget)):+Seq(ClockAnno(clo.toTarget)):+Seq(ModAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
+        val ret = new chaAssumeAnno(chaanotation:+Seq(ResetAnno(res.toTarget)):+Seq(ClockAnno(clo.toTarget)):+Seq(ModAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
+        println(s"chaAssumeStmt: ${chaAnno.CHAAnno2PSL(ret)._1}")
+        ret
       }
     })
   }
+
+  def chaCover(o:Object, s:String, isInitial:Boolean = false) =
+  {
+    val res = o.asInstanceOf[Module].reset
+    val en = !res.asBool
+    dontTouch(en)
+    val clo = o.asInstanceOf[Module].clock
+    dontTouch(clo)
+    val mod = o.asInstanceOf[Module]
+    val chaTree = new cha_tree(o)
+    val syntaxTree = chaTree.parseAll(chaTree.prop6, s)
+    // println(s"$res, $syntaxTree")
+    val chaSeq = syntaxTree.get.treeSerialize()
+
+    chaSeq.foreach{
+      case a: atom_prop_node => dontTouch(a.signal) 
+      case b => 
+    }
+    annotate(new ChiselAnnotation {
+      // Conversion to FIRRTL Annotation 
+      override def toFirrtl: Annotation = 
+      {
+        val chaanotation : Seq[Seq[cha_node]] = chaSeq map {
+          case atom_prop_node(ap) => Seq(atom_prop_anno(ap.toTarget))
+          case otherOp: chaElementAnno => Seq(otherOp)
+        } 
+        // println(s"chaAnnotation: ${chaanotation.toSeq}")
+        val commonAttached = Seq(Seq(ResetAnno(res.toTarget)),Seq(ClockAnno(clo.toTarget)), Seq(ModAnno(mod.toTarget)), Seq(EnableAnno(en.toTarget)))
+        // cover should not be initial assertion
+        val attachedAnnos = commonAttached
+        // if(!isInitial) commonAttached
+        // else commonAttached :+ Seq(InitialAssertion())
+        val ret = new chaCoverAnno(chaanotation ++ attachedAnnos)
+        println(s"chaCoverStmt: ${chaAnno.CHAAnno2PSL(ret)._1}")
+        ret
+        // new chaAnno(chaanotation:+Seq(ClockAnno(clo.toTarget)):+Seq(ModAnno(mod.toTarget)):+Seq(EnableAnno(en.toTarget)))
+      }
+    })
+  }
+
   
   def generateMap2p(seq:Seq[cha_node]) : Map[Target,String] =
   {
@@ -520,14 +565,15 @@ object chaAnno
 
     // distinguish assert with assume, assert statement need to be negated
     val isAssert = s.isInstanceOf[chaAssertAnno]
+    val isCover = s.isInstanceOf[chaCoverAnno]
     val neg = if (isAssert) "! " else ""
-    val initial =  if(!isInitial) "G " else "" 
+    val initial =  if(isCover) "F " else if(!isInitial) "G " else "" 
     val psl = neg + initial + "(" + deSeri._1.asInstanceOf[chaElementAnno].toPSL(target2p) + ") "
     // val psl = neg  + deSeri._1.asInstanceOf[chaElementAnno].toPSL(target2p)
-    println(s"psl: $psl")
     //val psl = "!" + chaAnno.toPSL(syntaxTree,target2p)
     // println(s"psl: $psl")
-    val stmt = if (isAssert) chaAssertStmt else chaAssumeStmt
+    val stmt = if (isAssert) chaAssertStmt else if(isCover) chaCoverStmt else chaAssumeStmt
+    // println(s"stmt: $stmt, psl: $psl")
     (psl,p2target,resetAn(0).asInstanceOf[ResetAnno].target,stmt)
   }
 }
@@ -536,6 +582,7 @@ object chaAnno
 
 case class chaAssumeAnno(ttargets: Seq[Seq[cha_node]]) extends chaAnno
 case class chaAssertAnno(ttargets: Seq[Seq[cha_node]]) extends chaAnno
+case class chaCoverAnno(ttargets: Seq[Seq[cha_node]]) extends chaAnno
 
 trait chaAnno extends MultiTargetAnnotation{
   //ttargets.filter(_.isInstanceOf[atom_prop_anno])
@@ -544,6 +591,7 @@ trait chaAnno extends MultiTargetAnnotation{
     this match {
       case chaAssertAnno(ttargets) => chaAssertAnno(ts)
       case chaAssumeAnno(ttargets) => chaAssumeAnno(ts)
+      case chaCoverAnno(ttargets) => chaCoverAnno(ts)
     } 
   }
 
